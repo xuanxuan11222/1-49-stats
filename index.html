@@ -438,10 +438,11 @@ body {
     </div>
     <div class="analysis-body" id="ptxBody">
       <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;flex-wrap:wrap;">
-        <span style="font-size:12px;color:#888;">平特肖赔率</span>
-        <input type="number" id="ptxOddsInput" value="12" step="0.1" style="width:60px;background:#222;border:1px solid #555;color:#fff;padding:3px;border-radius:4px;text-align:center;">
+        <span style="font-size:12px;color:#fff;font-weight:bold;">🐴 马带本赔</span>
+        <input type="number" id="horseOddsInput" value="1.8" step="0.1" style="width:55px;background:#222;border:1px solid #555;color:#FFD700;padding:3px;border-radius:4px;text-align:center;font-weight:bold;">
+        <span style="font-size:12px;color:#fff;font-weight:bold;">🧧 其他肖带本赔</span>
+        <input type="number" id="otherOddsInput" value="2" step="0.1" style="width:55px;background:#222;border:1px solid #555;color:#FFD700;padding:3px;border-radius:4px;text-align:center;font-weight:bold;">
         <button class="export-btn" onclick="renderPtx()">刷新</button>
-        <span style="font-size:11px;color:#666;">（可改，默认12≈49÷4）</span>
       </div>
       <div id="ptxContent"></div>
     </div>
@@ -1084,9 +1085,10 @@ function renderMissingMatrix() {
   return html;
 }
 
-// ================= 平特肖附表（v30.1 仿手写表·仅显示有投注生肖） =================
+// ================= 平特肖附表（v30.2 马1.8/其他2 风险分析） =================
 function renderPtx() {
-  let ptxOdds = parseFloat(document.getElementById('ptxOddsInput').value) || 12;
+  let horseOdds = parseFloat(document.getElementById('horseOddsInput').value) || 1.8;
+  let otherOdds = parseFloat(document.getElementById('otherOddsInput').value) || 2;
   let totalPool = 0; for(let n=1;n<=49;n++) totalPool += (data[n]||0);
   let rows = [];
   let order = '鼠牛虎兔龙蛇马羊猴鸡狗猪';
@@ -1094,66 +1096,74 @@ function renderPtx() {
     let z = order[i];
     let nums = ZODIAC_NUMBERS[z];
     let betZ = 0; nums.forEach(n => betZ += (data[n]||0));
-    // 仅保留有投注的生肖
     if (betZ > 0) {
-      let payout = Math.round(betZ * ptxOdds);
+      let odds = (z === '马') ? horseOdds : otherOdds;
+      let payout = Math.round(betZ * odds);
       let net = payout - totalPool;
       let pct = totalPool>0 ? (betZ/totalPool*100) : 0;
-      rows.push({z, nums, betZ, payout, net, pct});
+      let breakPoint = Math.ceil(totalPool / odds);
+      rows.push({z, nums, betZ, odds, payout, net, pct, breakPoint});
     }
   }
   rows.sort((a,b)=>b.betZ - a.betZ);
-  let breakBet = totalPool / ptxOdds;
   let html = '';
-  // 顶部汇总卡
+  // 顶部四张卡：总下注 / 马赔率 / 其他赔率 / 有投生肖
   html += '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;">';
-  html += `<div style="flex:1;min-width:90px;background:#111;border:1px solid #333;border-radius:8px;padding:8px;"><div style="font-size:11px;color:#888;">总下注</div><div style="font-size:16px;font-weight:900;color:#fff;">${totalPool}</div></div>`;
-  html += `<div style="flex:1;min-width:90px;background:#111;border:1px solid #333;border-radius:8px;padding:8px;"><div style="font-size:11px;color:#888;">平特肖赔率</div><div style="font-size:16px;font-weight:900;color:var(--gold);">${ptxOdds}</div></div>`;
-  html += `<div style="flex:1;min-width:90px;background:#111;border:1px solid #333;border-radius:8px;padding:8px;"><div style="font-size:11px;color:#888;">保本生肖线</div><div style="font-size:13px;font-weight:900;color:#00FF88;">≥ ${Math.ceil(breakBet)}</div></div>`;
-  html += `<div style="flex:1;min-width:90px;background:#111;border:1px solid #333;border-radius:8px;padding:8px;"><div style="font-size:11px;color:#888;">有投生肖</div><div style="font-size:16px;font-weight:900;color:#fff;">${rows.length}/12</div></div>`;
+  html += `<div style="flex:1;min-width:90px;background:#111;border:1px solid #333;border-radius:8px;padding:8px;"><div style="font-size:11px;color:#888;">总下注</div><div style="font-size:18px;font-weight:900;color:#fff;">${totalPool}</div></div>`;
+  html += `<div style="flex:1;min-width:90px;background:#111;border:1px solid #333;border-radius:8px;padding:8px;"><div style="font-size:11px;color:#888;">🐴 马带本赔</div><div style="font-size:18px;font-weight:900;color:#FFD700;">${horseOdds.toFixed(1)}</div></div>`;
+  html += `<div style="flex:1;min-width:90px;background:#111;border:1px solid #333;border-radius:8px;padding:8px;"><div style="font-size:11px;color:#888;">🧧 其他肖带本赔</div><div style="font-size:18px;font-weight:900;color:#FFD700;">${otherOdds.toFixed(1)}</div></div>`;
+  html += `<div style="flex:1;min-width:90px;background:#111;border:1px solid #333;border-radius:8px;padding:8px;"><div style="font-size:11px;color:#888;">有投生肖</div><div style="font-size:18px;font-weight:900;color:#fff;">${rows.length}/12</div></div>`;
   html += '</div>';
   // 算法说明
-  html += `<div style="font-size:11px;color:#888;margin-bottom:8px;line-height:1.5;">📒 算法：<b style="color:var(--gold);">平特肖净收 = (该生肖累计下注 × 赔率) − 总下注</b>。生肖累计下注 ≥ 保本线即不亏（高亮 ✅）。</div>`;
+  html += `<div style="font-size:11px;color:#888;margin-bottom:10px;line-height:1.6;padding:6px 10px;background:#1a1a25;border-left:3px solid var(--gold);border-radius:4px;">`;
+  html += `📒 <b style="color:var(--gold);">平特肖净收</b> = (生肖累计下注 × 该肖带本赔) − <b>总下注</b><br>`;
+  html += `&nbsp;&nbsp;• 马带本赔 <b style="color:#FFD700;">${horseOdds.toFixed(1)}</b>，其他生肖带本赔 <b style="color:#FFD700;">${otherOdds.toFixed(1)}</b><br>`;
+  html += `&nbsp;&nbsp;• <b style="color:#00FF88;">保本线</b> = 总下注 ÷ 该肖赔率；累计下注 ≥ 保本线即不亏 ✅<br>`;
+  html += `&nbsp;&nbsp;• 绿=净收≥0（赚），红=净收&lt;0（亏）`;
+  html += `</div>`;
   if (rows.length === 0) {
     html += `<div style="text-align:center;color:#888;padding:36px;background:#fff5;border-radius:8px;border:1px dashed #555;">暂无投注生肖 — 执行任意指令后这里会出现统计</div>`;
   } else {
-    // 纸面表：白底黑字，波色号码，生肖色块，金额列
+    // 纸面表
     html += '<div style="overflow-x:auto;border:1px solid #444;border-radius:8px;background:#FAFAFA;">';
     html += '<table style="width:100%;border-collapse:collapse;font-size:12px;color:#000;">';
     html += '<tr style="background:#E8E8E8;">';
-    html += '<th style="border:1px solid #888;padding:6px;width:42px;">编号</th>';
+    html += '<th style="border:1px solid #888;padding:6px;width:38px;">编号</th>';
     html += '<th style="border:1px solid #888;padding:6px;text-align:left;">号&nbsp;&nbsp;码</th>';
-    html += '<th style="border:1px solid #888;padding:6px;width:46px;">生肖</th>';
-    html += '<th style="border:1px solid #888;padding:6px;width:78px;">累计下注</th>';
-    html += '<th style="border:1px solid #888;padding:6px;width:60px;">占比</th>';
+    html += '<th style="border:1px solid #888;padding:6px;width:42px;">生肖</th>';
+    html += '<th style="border:1px solid #888;padding:6px;width:50px;background:#FFF3D0;">带本赔</th>';
+    html += '<th style="border:1px solid #888;padding:6px;width:72px;">累计下注</th>';
+    html += '<th style="border:1px solid #888;padding:6px;width:58px;">占比</th>';
     html += '<th style="border:1px solid #888;padding:6px;width:72px;">派奖(若中)</th>';
-    html += '<th style="border:1px solid #888;padding:6px;width:84px;">净收(若中)</th>';
+    html += '<th style="border:1px solid #888;padding:6px;width:90px;">净收(若中)</th>';
     html += '</tr>';
     rows.forEach((r, idx) => {
       let color = getZodiacColor(r.z);
       let netColor = r.net >= 0 ? '#0a8a3a' : '#C0392B';
-      let isBreak = r.betZ >= breakBet;
+      let isBreak = r.betZ >= r.breakPoint;
+      let oddsBg = r.odds === horseOdds && r.z === '马' ? '#FFE4B5' : '#FFF8DC';
       let numsHtml = r.nums.map(n => {
         let waveColor = RED.has(n) ? '#E74C3C' : (BLUE.has(n) ? '#3498DB' : '#27AE60');
         return `<span style="display:inline-block;min-width:22px;padding:2px 5px;margin:1px;color:${waveColor};font-weight:bold;border:1px solid #ccc;border-radius:3px;background:#fff;">${String(n).padStart(2,'0')}</span>`;
       }).join('');
-      html += `<tr style="${isBreak?'background:rgba(0,255,136,0.12);':''}">`;
+      html += `<tr style="${isBreak?'background:rgba(0,255,136,0.14);':''}">`;
       html += `<td style="border:1px solid #aaa;padding:5px;text-align:center;font-weight:bold;color:#333;">${idx+1}</td>`;
       html += `<td style="border:1px solid #aaa;padding:5px;">${numsHtml}</td>`;
       html += `<td style="border:1px solid #aaa;padding:5px;text-align:center;"><span style="display:inline-block;min-width:24px;padding:2px 6px;border-radius:4px;color:#fff;font-weight:bold;background:${color};">${r.z}</span></td>`;
+      html += `<td style="border:1px solid #aaa;padding:5px;text-align:center;background:${oddsBg};font-weight:bold;color:#B8860B;">${r.odds.toFixed(1)}</td>`;
       html += `<td style="border:1px solid #aaa;padding:5px;text-align:right;font-weight:bold;color:#000;">${r.betZ}</td>`;
       html += `<td style="border:1px solid #aaa;padding:5px;text-align:right;color:#555;">${r.pct.toFixed(1)}%</td>`;
       html += `<td style="border:1px solid #aaa;padding:5px;text-align:right;color:#B8860B;font-weight:bold;">${r.payout}</td>`;
-      html += `<td style="border:1px solid #aaa;padding:5px;text-align:right;font-weight:bold;color:${netColor};">${r.net>=0?'+':''}${r.net}${isBreak?' ✅':''}</td>`;
+      let mark = isBreak ? ' ✅' : (r.net < 0 ? ' ⚠️' : '');
+      html += `<td style="border:1px solid #aaa;padding:5px;text-align:right;font-weight:bold;color:${netColor};">${r.net>=0?'+':''}${r.net}${mark}</td>`;
       html += '</tr>';
     });
     // 合计行
-    let totPct = totalPool>0 ? 100 : 0;
     html += `<tr style="background:#F0F0F0;font-weight:bold;">`;
-    html += `<td colspan="3" style="border:1px solid #aaa;padding:5px;text-align:right;color:#333;">合计 (${rows.length} 个生肖)</td>`;
+    html += `<td colspan="4" style="border:1px solid #aaa;padding:5px;text-align:right;color:#333;">合计 (${rows.length} 个生肖)</td>`;
     html += `<td style="border:1px solid #aaa;padding:5px;text-align:right;color:#000;">${totalPool}</td>`;
-    html += `<td style="border:1px solid #aaa;padding:5px;text-align:right;color:#333;">${totPct.toFixed(1)}%</td>`;
-    html += `<td colspan="2" style="border:1px solid #aaa;padding:5px;text-align:center;color:#888;">— 详见各生肖 —</td>`;
+    html += `<td style="border:1px solid #aaa;padding:5px;text-align:right;color:#333;">100.0%</td>`;
+    html += `<td colspan="2" style="border:1px solid #aaa;padding:5px;text-align:center;color:#888;">— 按生肖分别算 —</td>`;
     html += `</tr>`;
     html += '</table></div>';
   }
