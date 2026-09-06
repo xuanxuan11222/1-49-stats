@@ -48,7 +48,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#05050A">
-<title>1-49号码统计系统 v30.8 点分多号减法</title>
+<title>1-49号码统计系统 v30.9 执行日志+备份</title>
 <style>
 :root {
   --bg: #05050A; --card-bg: rgba(20, 20, 35, 0.9); --border: #2A2A40;
@@ -98,7 +98,31 @@ body {
   padding: 0 14px; font-weight: 800; font-size: 14px; cursor: pointer;
 }
 .cmd-box button.undo { background: #E67E22; color: #fff; }
-.log-box { color: #666; font-size: 10px; padding: 4px; background: #000; border-radius: 6px; border: 1px solid #222; min-height: 20px; white-space: nowrap; overflow-x: auto; }
+.log-box { display: none; }
+/* 输入区强化 */
+.cmd-box { display: flex; gap: 6px; align-items: center; padding: 8px; background: linear-gradient(135deg,#1a1a1a,#0f0f0f); border-radius: 12px; border: 1px solid #333; }
+.cmd-box input { flex: 1; background: #000; border: 1px solid #555; border-radius: 10px; padding: 12px 14px; color: #fff; font-size: 17px; outline: none; font-weight: 600; }
+.cmd-box button { background: var(--primary); color: #000; border: none; border-radius: 10px; padding: 0 16px; height: 42px; font-weight: 800; font-size: 14px; cursor: pointer; }
+.cmd-box button.undo { background: #E67E22; color: #fff; }
+.cmd-meta { display: flex; align-items: center; gap: 10px; padding: 0 6px; font-size: 11px; color: #777; }
+.save-status { color: #888; font-size: 11px; transition: color .3s; }
+.save-status.flash { color: var(--green); font-weight: 700; }
+.cmd-hint { color: #555; font-size: 10px; }
+/* 执行日志 */
+.exec-log { background: #0a0a0a; border: 1px solid #2a2a2a; border-radius: 10px; padding: 8px 10px; max-height: 220px; display: flex; flex-direction: column; }
+.exec-log-header { display: flex; align-items: center; gap: 10px; padding-bottom: 6px; border-bottom: 1px solid #222; font-size: 12px; color: #aaa; margin-bottom: 6px; }
+.exec-log-header .log-count { background: #2a2a2a; padding: 1px 7px; border-radius: 10px; font-size: 10px; color: #ccc; }
+.exec-log-header .err-only-label { margin-left: auto; font-size: 11px; color: #888; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+.exec-log-header .clear-log-btn { background: transparent; border: 1px solid #444; color: #aaa; padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+.exec-log-header .clear-log-btn:hover { background: #2a1515; color: var(--red); }
+.exec-log-list { overflow-y: auto; flex: 1; display: flex; flex-direction: column-reverse; gap: 4px; max-height: 150px; padding-right: 4px; }
+.exec-log-list .entry { padding: 6px 10px; border-radius: 6px; font-size: 12.5px; line-height: 1.45; border-left: 3px solid #444; background: #141414; word-break: break-all; }
+.exec-log-list .entry.success { border-left-color: var(--green); }
+.exec-log-list .entry.error { border-left-color: var(--red); background: #2a1515; color: #ffbbbb; font-weight: 600; }
+.exec-log-list .entry .ts { color: #666; font-size: 10px; margin-right: 8px; font-family: ui-monospace, monospace; }
+.exec-log-list .entry .batch { color: #ccc; font-size: 10px; margin-right: 8px; font-family: ui-monospace, monospace; background: #222; padding: 1px 5px; border-radius: 3px; }
+.exec-log-list .entry .msg { color: inherit; }
+.exec-log-list .empty { text-align: center; color: #555; padding: 12px; font-size: 12px; }
 
 /* 输入建议 */
 .suggestions {
@@ -293,7 +317,7 @@ body {
 
 <div class="app-header">
   <div class="header-top">
-    <span class="app-title">🔢 1-49 统算中心 v30.8 点分多号减法</span>
+    <span class="app-title">🔢 1-49 统算中心 v30.9 执行日志+备份</span>
     <span style="font-size:10px;color:#666;">AI 增强</span>
   </div>
   <div class="total-display">
@@ -306,12 +330,25 @@ body {
   
   <div class="input-zone">
     <div class="cmd-box">
-      <input type="text" id="cmdInput" placeholder='指令: "10 20 各 50" 或 "大 50"' autocomplete="off">
+      <input type="text" id="cmdInput" placeholder='指令: "10 20 各 50" 或 "大 50"  (回车执行)' autocomplete="off">
       <button onclick="executeCmd()">执行</button>
       <button class="undo" onclick="undoLast()">↩</button>
+      <button onclick="exportBackup()" title="导出备份到本地 JSON" style="background:#2a7a2a;color:#fff;">💾</button>
+      <button onclick="importBackup()" title="从备份文件恢复" style="background:#2a5a7a;color:#fff;">📥</button>
+    </div>
+    <div class="cmd-meta">
+      <span id="saveStatus" class="save-status">💾 自动保存中</span>
+      <span class="cmd-hint">回车执行 · 备份存盘双保险</span>
     </div>
     <div class="suggestions" id="suggestions"></div>
-    <div class="log-box" id="logBox">等待指令...</div>
+    <div class="exec-log">
+      <div class="exec-log-header">
+        <span>📋 执行日志 <span id="logCount" class="log-count">0</span></span>
+        <label class="err-only-label"><input type="checkbox" id="errOnly" onchange="renderExecLog()"> 只看错误</label>
+        <button onclick="clearExecLog()" class="clear-log-btn">🗑️ 清日志</button>
+      </div>
+      <div class="exec-log-list" id="execLogList"></div>
+    </div>
   </div>
 
   <div id="riskAlert"></div>
@@ -726,14 +763,93 @@ function loadData() {
   refreshHistory();
 }
 
-function saveData() { 
-  try { 
+function saveData() {
+  try {
     localStorage.setItem('numStats_v24', JSON.stringify(data));
-  } catch(e) {} 
+    const el = document.getElementById('saveStatus');
+    if (el) {
+      const t = new Date();
+      el.textContent = `💾 已保存 ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}:${String(t.getSeconds()).padStart(2,'0')}`;
+      el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+      setTimeout(() => el.classList.remove('flash'), 700);
+    }
+  } catch(e) {}
 }
+
+// ===== 执行日志 + 备份 =====
+let execLog = [];
+let currentBatch = '';
+
+function loadExecLog() {
+  try { const s = localStorage.getItem('execLog_v1'); if (s) execLog = JSON.parse(s) || []; } catch(e) { execLog = []; }
+}
+function saveExecLog() {
+  try { localStorage.setItem('execLog_v1', JSON.stringify(execLog.slice(-100))); } catch(e) {}
+}
+function pushLog(batch, type, msg) {
+  const t = new Date();
+  const ts = `${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}:${String(t.getSeconds()).padStart(2,'0')}`;
+  execLog.push({ ts, batch: (batch||'').slice(0,40), type, msg: String(msg).slice(0,140) });
+  if (execLog.length > 100) execLog = execLog.slice(-100);
+  saveExecLog(); renderExecLog();
+}
+function renderExecLog() {
+  const list = document.getElementById('execLogList');
+  const countEl = document.getElementById('logCount');
+  if (countEl) countEl.textContent = execLog.length;
+  if (!list) return;
+  const errOnly = document.getElementById('errOnly') && document.getElementById('errOnly').checked;
+  let items = execLog.slice().reverse();
+  if (errOnly) items = items.filter(e => e.type === 'error');
+  if (!items.length) { list.innerHTML = `<div class="empty">${errOnly ? '✅ 没有错误记录' : '等待指令...'}</div>`; return; }
+  list.innerHTML = items.map(e => `<div class="entry ${e.type}"><span class="ts">${e.ts}</span>${e.batch?`<span class="batch">${escapeHtml(e.batch)}</span>`:''}<span class="msg">${escapeHtml(e.msg)}</span></div>`).join('');
+}
+function clearExecLog() { if (!confirm('清空执行日志？')) return; execLog = []; saveExecLog(); renderExecLog(); }
+function escapeHtml(s) { return String(s).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function exportBackup() {
+  try {
+    const payload = { data, ptxBets, historyData, exportTime: new Date().toISOString(), version: 'v30.9' };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `1-49-backup-${new Date().toISOString().slice(0,10)}.json`;
+    a.click(); URL.revokeObjectURL(a.href);
+    pushLog('exportBackup', 'success', '✅ 备份已导出到本地');
+    showToast('✅ 备份已导出', 'success');
+  } catch(e) { pushLog('exportBackup', 'error', '❌ 导出失败'); showToast('❌ 导出失败', 'error'); }
+}
+
+function importBackup() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.json,application/json';
+  inp.onchange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = ev => {
+      try {
+        const obj = JSON.parse(ev.target.result);
+        if (obj.data) { data = obj.data; for(let n=1;n<=49;n++) if(data[n]===undefined) data[n]=0; }
+        if (obj.ptxBets) { ptxBets = obj.ptxBets; savePtx(); }
+        if (obj.historyData) historyData = obj.historyData;
+        saveData(); renderGrid(); updateStats(); refreshHistory();
+        pushLog('importBackup', 'success', '✅ 备份已恢复');
+        showToast('✅ 备份已恢复', 'success');
+      } catch(err) {
+        pushLog('importBackup', 'error', '❌ 备份文件无效');
+        showToast('❌ 备份文件无效', 'error');
+      }
+    };
+    r.readAsText(f);
+  };
+  inp.click();
+}
+
+window.addEventListener('beforeunload', () => { try { saveData(); savePtx(); saveExecLog(); } catch(e) {} });
 
 // ================= v25.0 终极指令识别引擎 (修复版) =================
 function processBatch(text) {
+  currentBatch = text;
   let results = [];
   undoStack.push(JSON.stringify(data));
   
@@ -984,6 +1100,7 @@ function processBatch(text) {
   showToast('❌ 无法识别：' + text, 'error');
   parseLog.push('❌ ' + text);
   updateLogBox();
+  pushLog(text, 'error', '无法识别指令');
 }
 
 function finishParse(results) {
@@ -991,13 +1108,13 @@ function finishParse(results) {
   parseLog.push('✅ ' + results.join(', '));
   updateLogBox();
   showToast('✅ ' + results.join(', '), 'success');
+  pushLog(currentBatch, 'success', results.join(', '));
 }
 
 function updateLogBox() {
   let box = document.getElementById('logBox');
-  let recent = parseLog.slice(-8);
-  box.textContent = recent.join(' | ');
-  box.scrollLeft = box.scrollWidth;
+  if (box) { let recent = parseLog.slice(-8); box.textContent = recent.join(' | '); box.scrollLeft = box.scrollWidth; }
+  renderExecLog();
 }
 
 function executeCmd() {
@@ -1785,7 +1902,7 @@ document.addEventListener('click', function(e) {
 });
 
 // ================= 初始化 =================
-loadData(); loadPtx(); renderGrid(); updateStats();
+loadData(); loadPtx(); loadExecLog(); renderGrid(); updateStats(); renderExecLog();
 </script>
 </body>
 </html>
