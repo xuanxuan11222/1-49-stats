@@ -310,8 +310,25 @@ body {
       <button class="q-btn btn-act" onclick="typeCmd('小数 ')">小数</button>
       <button class="q-btn btn-act" onclick="typeCmd('单 ')">全单</button>
       <button class="q-btn btn-act" onclick="typeCmd('双 ')">全双</button>
-      <button class="q-btn btn-act" onclick="typeCmd('0 尾 ')">0 尾</button>
-      <button class="q-btn btn-act" onclick="typeCmd('5 尾 ')">5 尾</button>
+    </div>
+    <div class="pad-row">
+      <button class="q-btn btn-act" onclick="typeCmd('0 头 ')">0头</button>
+      <button class="q-btn btn-act" onclick="typeCmd('1 头 ')">1头</button>
+      <button class="q-btn btn-act" onclick="typeCmd('2 头 ')">2头</button>
+      <button class="q-btn btn-act" onclick="typeCmd('3 头 ')">3头</button>
+      <button class="q-btn btn-act" onclick="typeCmd('4 头 ')">4头</button>
+    </div>
+    <div class="pad-row">
+      <button class="q-btn btn-act" onclick="typeCmd('0 尾 ')">0尾</button>
+      <button class="q-btn btn-act" onclick="typeCmd('1 尾 ')">1尾</button>
+      <button class="q-btn btn-act" onclick="typeCmd('2 尾 ')">2尾</button>
+      <button class="q-btn btn-act" onclick="typeCmd('3 尾 ')">3尾</button>
+      <button class="q-btn btn-act" onclick="typeCmd('4 尾 ')">4尾</button>
+      <button class="q-btn btn-act" onclick="typeCmd('5 尾 ')">5尾</button>
+      <button class="q-btn btn-act" onclick="typeCmd('6 尾 ')">6尾</button>
+      <button class="q-btn btn-act" onclick="typeCmd('7 尾 ')">7尾</button>
+      <button class="q-btn btn-act" onclick="typeCmd('8 尾 ')">8尾</button>
+      <button class="q-btn btn-act" onclick="typeCmd('9 尾 ')">9尾</button>
     </div>
     <div class="pad-row">
       <button class="q-btn btn-num" onclick="typeCmd('牛 ')">牛</button>
@@ -414,6 +431,22 @@ body {
     </div>
   </div>
 
+  <div class="analysis-section">
+    <div class="analysis-header" onclick="toggleAnalysis('ptx')">
+      <h3>🐲 平特肖分析</h3>
+      <span id="ptxToggle">▼</span>
+    </div>
+    <div class="analysis-body" id="ptxBody">
+      <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;flex-wrap:wrap;">
+        <span style="font-size:12px;color:#888;">平特肖赔率</span>
+        <input type="number" id="ptxOddsInput" value="12" step="0.1" style="width:60px;background:#222;border:1px solid #555;color:#fff;padding:3px;border-radius:4px;text-align:center;">
+        <button class="export-btn" onclick="renderPtx()">刷新</button>
+        <span style="font-size:11px;color:#666;">（可改，默认12≈49÷4）</span>
+      </div>
+      <div id="ptxContent"></div>
+    </div>
+  </div>
+
   <div class="stats-section">
     <div class="stats-header">
       <h3>📊 盈亏监控</h3>
@@ -458,6 +491,7 @@ const SMALL_NUMS = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,
 const ODD_NUMS = [1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,33,35,37,39,41,43,45,47,49];
 const EVEN_NUMS = [2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48];
 const TAIL_NUMS = {0:[10,20,30,40],1:[1,11,21,31,41],2:[2,12,22,32,42],3:[3,13,23,33,43],4:[4,14,24,34,44],5:[5,15,25,35,45],6:[6,16,26,36,46],7:[7,17,27,37,47],8:[8,18,28,38,48],9:[9,19,29,39,49]};
+const HEAD_NUMS = {0:[1,2,3,4,5,6,7,8,9],1:[10,11,12,13,14,15,16,17,18,19],2:[20,21,22,23,24,25,26,27,28,29],3:[30,31,32,33,34,35,36,37,38,39],4:[40,41,42,43,44,45,46,47,48,49]};
 
 let data = {};
 let historyData = [];
@@ -718,8 +752,8 @@ function processBatch(text) {
       let filtered = oe === '单' ? waveNums.filter(n => n % 2 !== 0) : waveNums.filter(n => n % 2 === 0);
       filtered.forEach(n => { data[n] = (data[n]||0) + val; });
       results.push(`${wave}${oe}+${val}`);
-    } else if (/^(大数|小数|全单|全双|单数|双数|单|双)$/.test(subject) || /^\d尾$/.test(subject)) {
-      // 类别 (如"小数"、"5 尾")
+    } else if (/^(大数|小数|全单|全双|单数|双数|单|双)$/.test(subject) || /^\d\s*尾$/.test(subject) || /^\d\s*头$/.test(subject)) {
+      // 类别 (如"小数"、"5 尾"、"1 头")
       let nums = [];
       if (subject.includes('大')) nums = BIG_NUMS;
       else if (subject.includes('小')) nums = SMALL_NUMS;
@@ -728,6 +762,9 @@ function processBatch(text) {
       else if (subject.includes('尾')) {
         let tail = parseInt(subject[0]);
         nums = TAIL_NUMS[tail] || [];
+      } else if (subject.includes('头')) {
+        let h = parseInt(subject[0]);
+        nums = HEAD_NUMS[h] || [];
       }
       nums.forEach(n => { data[n] = (data[n]||0) + val; });
       results.push(`${subject}+${val}`);
@@ -778,13 +815,23 @@ function processBatch(text) {
     finishParse(results); return;
   }
 
-  let tailPattern = /^(\d)尾\s*(\d+)$/;
+  let tailPattern = /^(\d)\s*尾\s*(\d+)$/;
   mCat = clean.match(tailPattern);
   if (mCat) {
     let tail = parseInt(mCat[1]), val = parseInt(mCat[2]);
     let nums = TAIL_NUMS[tail] || [];
     nums.forEach(n => { data[n] = (data[n]||0) + val; });
     results.push(`${tail}尾+${val}`);
+    finishParse(results); return;
+  }
+
+  let headPattern = /^(\d)\s*头\s*(\d+)$/;
+  mCat = clean.match(headPattern);
+  if (mCat) {
+    let h = parseInt(mCat[1]), val = parseInt(mCat[2]);
+    let nums = HEAD_NUMS[h] || [];
+    nums.forEach(n => { data[n] = (data[n]||0) + val; });
+    results.push(`${h}头+${val}`);
     finishParse(results); return;
   }
   
@@ -931,6 +978,9 @@ function toggleAnalysis(type) {
   if(type === 'trend' && body.classList.contains('show')) {
     showTrendTab('line');
   }
+  if(type === 'ptx' && body.classList.contains('show')) {
+    renderPtx();
+  }
 }
 
 function showFreqTab(tab) {
@@ -1032,6 +1082,50 @@ function renderMissingMatrix() {
   
   html += '</table></div>';
   return html;
+}
+
+// ================= 平特肖分析（附表） =================
+function renderPtx() {
+  let ptxOdds = parseFloat(document.getElementById('ptxOddsInput').value) || 12;
+  let totalPool = 0; for(let n=1;n<=49;n++) totalPool += (data[n]||0);
+  let rows = [];
+  let order = '鼠牛虎兔龙蛇马羊猴鸡狗猪';
+  for(let i=0;i<order.length;i++){
+    let z = order[i];
+    let nums = ZODIAC_NUMBERS[z];
+    let betZ = 0; nums.forEach(n => betZ += (data[n]||0));
+    let payout = Math.round(betZ * ptxOdds);
+    let net = payout - totalPool;
+    let pct = totalPool>0 ? (betZ/totalPool*100) : 0;
+    rows.push({z, nums, betZ, payout, net, pct});
+  }
+  rows.sort((a,b)=>b.betZ - a.betZ);
+  let breakBet = totalPool / ptxOdds;
+  let html = '';
+  html += '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;">';
+  html += `<div style="flex:1;min-width:90px;background:#111;border:1px solid #333;border-radius:8px;padding:8px;"><div style="font-size:11px;color:#888;">总下注</div><div style="font-size:16px;font-weight:900;color:#fff;">${totalPool}</div></div>`;
+  html += `<div style="flex:1;min-width:90px;background:#111;border:1px solid #333;border-radius:8px;padding:8px;"><div style="font-size:11px;color:#888;">平特肖赔率</div><div style="font-size:16px;font-weight:900;color:var(--gold);">${ptxOdds}</div></div>`;
+  html += `<div style="flex:1;min-width:90px;background:#111;border:1px solid #333;border-radius:8px;padding:8px;"><div style="font-size:11px;color:#888;">保本生肖线</div><div style="font-size:13px;font-weight:900;color:#00FF88;">≥ ${Math.ceil(breakBet)}</div></div>`;
+  html += '</div>';
+  html += `<div style="font-size:11px;color:#888;margin-bottom:8px;line-height:1.5;">算法：平特肖净收 = (该生肖累计下注 × 赔率) − 总下注。生肖累计下注 ≥ 保本线即不亏。</div>`;
+  html += '<div style="overflow-x:auto;"><table class="freq-table" style="min-width:340px;">'
+  html += '<tr><th>生肖</th><th>号码</th><th>累计下注</th><th>占比</th><th>派奖(若中)</th><th>净收(若中)</th></tr>';
+  rows.forEach(r => {
+    let color = getZodiacColor(r.z);
+    let netColor = r.net >= 0 ? '#00FF88' : '#FF4D4D';
+    let isBreak = r.betZ >= breakBet;
+    let barW = Math.max(2, Math.round(r.pct));
+    html += `<tr style="${isBreak?'background:rgba(0,255,136,0.06);':''}">
+      <td><span style="display:inline-block;min-width:20px;padding:1px 6px;border-radius:4px;color:#000;font-weight:bold;background:${color};">${r.z}</span></td>
+      <td style="font-size:10px;color:#aaa;">${r.nums.join(' ')}</td>
+      <td style="font-weight:bold;color:#fff;">${r.betZ}</td>
+      <td style="white-space:nowrap;"><span style="display:inline-block;height:8px;width:${barW}px;background:${color};border-radius:2px;vertical-align:middle;"></span> ${r.pct.toFixed(1)}%</td>
+      <td style="color:var(--gold);">${r.payout}</td>
+      <td style="font-weight:bold;color:${netColor};">${r.net>=0?'+':''}${r.net}${isBreak?' ✅':''}</td>
+    </tr>`;
+  });
+  html += '</table></div>';
+  document.getElementById('ptxContent').innerHTML = html;
 }
 
 // ================= 趋势图表 =================
