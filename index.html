@@ -48,7 +48,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#05050A">
-<title>1-49号码统计系统 v30.7 风险等级总览</title>
+<title>1-49号码统计系统 v30.8 点分多号减法</title>
 <style>
 :root {
   --bg: #05050A; --card-bg: rgba(20, 20, 35, 0.9); --border: #2A2A40;
@@ -293,7 +293,7 @@ body {
 
 <div class="app-header">
   <div class="header-top">
-    <span class="app-title">🔢 1-49 统算中心 v30.7 风险等级总览</span>
+    <span class="app-title">🔢 1-49 统算中心 v30.8 点分多号减法</span>
     <span style="font-size:10px;color:#666;">AI 增强</span>
   </div>
   <div class="total-display">
@@ -926,7 +926,7 @@ function processBatch(text) {
     }
     
     // 多条减法指令逐一识别："1-100 2-50" / "牛-50 鼠-30"（修复原先只处理第一条）
-    let subTokens = clean.match(/([\d鼠牛虎兔龙蛇马羊猴鸡狗猪]+(?:\+[\d鼠牛虎兔龙蛇马羊猴鸡狗猪]+)*)\s*[\-—减]\s*(\d+)/g);
+    let subTokens = clean.match(/([\d鼠牛虎兔龙蛇马羊猴鸡狗猪]+(?:[+\.][\d鼠牛虎兔龙蛇马羊猴鸡狗猪]+)*)\s*[\-—减]\s*(\d+)/g);
     if (subTokens && subTokens.length > 0) {
       let any = false;
       subTokens.forEach(tok => {
