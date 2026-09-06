@@ -48,7 +48,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#05050A">
-<title>1-49号码统计系统 v27.0 超级分析版</title>
+<title>1-49号码统计系统 v30 平特肖头尾版</title>
 <style>
 :root {
   --bg: #05050A; --card-bg: rgba(20, 20, 35, 0.9); --border: #2A2A40;
@@ -273,7 +273,7 @@ body {
 
 <div class="app-header">
   <div class="header-top">
-    <span class="app-title">🔢 1-49 统算中心 v27.0 超级分析版</span>
+    <span class="app-title">🔢 1-49 统算中心 v30 平特肖头尾版</span>
     <span style="font-size:10px;color:#666;">AI 增强</span>
   </div>
   <div class="total-display">
@@ -1084,7 +1084,7 @@ function renderMissingMatrix() {
   return html;
 }
 
-// ================= 平特肖分析（附表） =================
+// ================= 平特肖附表（v30.1 仿手写表·仅显示有投注生肖） =================
 function renderPtx() {
   let ptxOdds = parseFloat(document.getElementById('ptxOddsInput').value) || 12;
   let totalPool = 0; for(let n=1;n<=49;n++) totalPool += (data[n]||0);
@@ -1094,37 +1094,69 @@ function renderPtx() {
     let z = order[i];
     let nums = ZODIAC_NUMBERS[z];
     let betZ = 0; nums.forEach(n => betZ += (data[n]||0));
-    let payout = Math.round(betZ * ptxOdds);
-    let net = payout - totalPool;
-    let pct = totalPool>0 ? (betZ/totalPool*100) : 0;
-    rows.push({z, nums, betZ, payout, net, pct});
+    // 仅保留有投注的生肖
+    if (betZ > 0) {
+      let payout = Math.round(betZ * ptxOdds);
+      let net = payout - totalPool;
+      let pct = totalPool>0 ? (betZ/totalPool*100) : 0;
+      rows.push({z, nums, betZ, payout, net, pct});
+    }
   }
   rows.sort((a,b)=>b.betZ - a.betZ);
   let breakBet = totalPool / ptxOdds;
   let html = '';
+  // 顶部汇总卡
   html += '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;">';
   html += `<div style="flex:1;min-width:90px;background:#111;border:1px solid #333;border-radius:8px;padding:8px;"><div style="font-size:11px;color:#888;">总下注</div><div style="font-size:16px;font-weight:900;color:#fff;">${totalPool}</div></div>`;
   html += `<div style="flex:1;min-width:90px;background:#111;border:1px solid #333;border-radius:8px;padding:8px;"><div style="font-size:11px;color:#888;">平特肖赔率</div><div style="font-size:16px;font-weight:900;color:var(--gold);">${ptxOdds}</div></div>`;
   html += `<div style="flex:1;min-width:90px;background:#111;border:1px solid #333;border-radius:8px;padding:8px;"><div style="font-size:11px;color:#888;">保本生肖线</div><div style="font-size:13px;font-weight:900;color:#00FF88;">≥ ${Math.ceil(breakBet)}</div></div>`;
+  html += `<div style="flex:1;min-width:90px;background:#111;border:1px solid #333;border-radius:8px;padding:8px;"><div style="font-size:11px;color:#888;">有投生肖</div><div style="font-size:16px;font-weight:900;color:#fff;">${rows.length}/12</div></div>`;
   html += '</div>';
-  html += `<div style="font-size:11px;color:#888;margin-bottom:8px;line-height:1.5;">算法：平特肖净收 = (该生肖累计下注 × 赔率) − 总下注。生肖累计下注 ≥ 保本线即不亏。</div>`;
-  html += '<div style="overflow-x:auto;"><table class="freq-table" style="min-width:340px;">'
-  html += '<tr><th>生肖</th><th>号码</th><th>累计下注</th><th>占比</th><th>派奖(若中)</th><th>净收(若中)</th></tr>';
-  rows.forEach(r => {
-    let color = getZodiacColor(r.z);
-    let netColor = r.net >= 0 ? '#00FF88' : '#FF4D4D';
-    let isBreak = r.betZ >= breakBet;
-    let barW = Math.max(2, Math.round(r.pct));
-    html += `<tr style="${isBreak?'background:rgba(0,255,136,0.06);':''}">
-      <td><span style="display:inline-block;min-width:20px;padding:1px 6px;border-radius:4px;color:#000;font-weight:bold;background:${color};">${r.z}</span></td>
-      <td style="font-size:10px;color:#aaa;">${r.nums.join(' ')}</td>
-      <td style="font-weight:bold;color:#fff;">${r.betZ}</td>
-      <td style="white-space:nowrap;"><span style="display:inline-block;height:8px;width:${barW}px;background:${color};border-radius:2px;vertical-align:middle;"></span> ${r.pct.toFixed(1)}%</td>
-      <td style="color:var(--gold);">${r.payout}</td>
-      <td style="font-weight:bold;color:${netColor};">${r.net>=0?'+':''}${r.net}${isBreak?' ✅':''}</td>
-    </tr>`;
-  });
-  html += '</table></div>';
+  // 算法说明
+  html += `<div style="font-size:11px;color:#888;margin-bottom:8px;line-height:1.5;">📒 算法：<b style="color:var(--gold);">平特肖净收 = (该生肖累计下注 × 赔率) − 总下注</b>。生肖累计下注 ≥ 保本线即不亏（高亮 ✅）。</div>`;
+  if (rows.length === 0) {
+    html += `<div style="text-align:center;color:#888;padding:36px;background:#fff5;border-radius:8px;border:1px dashed #555;">暂无投注生肖 — 执行任意指令后这里会出现统计</div>`;
+  } else {
+    // 纸面表：白底黑字，波色号码，生肖色块，金额列
+    html += '<div style="overflow-x:auto;border:1px solid #444;border-radius:8px;background:#FAFAFA;">';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:12px;color:#000;">';
+    html += '<tr style="background:#E8E8E8;">';
+    html += '<th style="border:1px solid #888;padding:6px;width:42px;">编号</th>';
+    html += '<th style="border:1px solid #888;padding:6px;text-align:left;">号&nbsp;&nbsp;码</th>';
+    html += '<th style="border:1px solid #888;padding:6px;width:46px;">生肖</th>';
+    html += '<th style="border:1px solid #888;padding:6px;width:78px;">累计下注</th>';
+    html += '<th style="border:1px solid #888;padding:6px;width:60px;">占比</th>';
+    html += '<th style="border:1px solid #888;padding:6px;width:72px;">派奖(若中)</th>';
+    html += '<th style="border:1px solid #888;padding:6px;width:84px;">净收(若中)</th>';
+    html += '</tr>';
+    rows.forEach((r, idx) => {
+      let color = getZodiacColor(r.z);
+      let netColor = r.net >= 0 ? '#0a8a3a' : '#C0392B';
+      let isBreak = r.betZ >= breakBet;
+      let numsHtml = r.nums.map(n => {
+        let waveColor = RED.has(n) ? '#E74C3C' : (BLUE.has(n) ? '#3498DB' : '#27AE60');
+        return `<span style="display:inline-block;min-width:22px;padding:2px 5px;margin:1px;color:${waveColor};font-weight:bold;border:1px solid #ccc;border-radius:3px;background:#fff;">${String(n).padStart(2,'0')}</span>`;
+      }).join('');
+      html += `<tr style="${isBreak?'background:rgba(0,255,136,0.12);':''}">`;
+      html += `<td style="border:1px solid #aaa;padding:5px;text-align:center;font-weight:bold;color:#333;">${idx+1}</td>`;
+      html += `<td style="border:1px solid #aaa;padding:5px;">${numsHtml}</td>`;
+      html += `<td style="border:1px solid #aaa;padding:5px;text-align:center;"><span style="display:inline-block;min-width:24px;padding:2px 6px;border-radius:4px;color:#fff;font-weight:bold;background:${color};">${r.z}</span></td>`;
+      html += `<td style="border:1px solid #aaa;padding:5px;text-align:right;font-weight:bold;color:#000;">${r.betZ}</td>`;
+      html += `<td style="border:1px solid #aaa;padding:5px;text-align:right;color:#555;">${r.pct.toFixed(1)}%</td>`;
+      html += `<td style="border:1px solid #aaa;padding:5px;text-align:right;color:#B8860B;font-weight:bold;">${r.payout}</td>`;
+      html += `<td style="border:1px solid #aaa;padding:5px;text-align:right;font-weight:bold;color:${netColor};">${r.net>=0?'+':''}${r.net}${isBreak?' ✅':''}</td>`;
+      html += '</tr>';
+    });
+    // 合计行
+    let totPct = totalPool>0 ? 100 : 0;
+    html += `<tr style="background:#F0F0F0;font-weight:bold;">`;
+    html += `<td colspan="3" style="border:1px solid #aaa;padding:5px;text-align:right;color:#333;">合计 (${rows.length} 个生肖)</td>`;
+    html += `<td style="border:1px solid #aaa;padding:5px;text-align:right;color:#000;">${totalPool}</td>`;
+    html += `<td style="border:1px solid #aaa;padding:5px;text-align:right;color:#333;">${totPct.toFixed(1)}%</td>`;
+    html += `<td colspan="2" style="border:1px solid #aaa;padding:5px;text-align:center;color:#888;">— 详见各生肖 —</td>`;
+    html += `</tr>`;
+    html += '</table></div>';
+  }
   document.getElementById('ptxContent').innerHTML = html;
 }
 
