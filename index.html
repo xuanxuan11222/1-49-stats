@@ -256,6 +256,12 @@ body {
   padding: 12px; display: none;
 }
 .export-panel.show { display: block; }
+
+/* 报表手动复制弹窗 */
+.report-modal{position:fixed;inset:0;background:rgba(0,0,0,.72);display:none;align-items:center;justify-content:center;z-index:99999;padding:16px;}
+.report-modal.show{display:flex;}
+.report-modal-box{background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:14px;width:92%;max-width:540px;}
+.report-modal textarea{width:100%;height:52vh;font-size:11px;line-height:1.5;background:#0d0d14;color:#e8e8e8;border:1px solid #444;border-radius:8px;padding:8px;resize:none;}
 .export-btn {
   background: #333; color: #fff; border: none; border-radius: 8px;
   padding: 8px 12px; font-size: 12px; cursor: pointer; margin: 4px;
@@ -339,6 +345,14 @@ body {
     <button class="export-btn" onclick="exportCSV()">导出 CSV</button>
     <button class="export-btn" onclick="exportJSON()">导出 JSON</button>
     <button class="export-btn" onclick="importData()">导入数据</button>
+  </div>
+
+  <div class="report-modal" id="reportModal">
+    <div class="report-modal-box">
+      <div style="color:var(--gold);font-weight:700;margin-bottom:8px;">📑 报表（长按文本可复制）</div>
+      <textarea id="reportText" readonly></textarea>
+      <button class="export-btn" style="margin-top:8px;" onclick="document.getElementById('reportModal').classList.remove('show')">关闭</button>
+    </div>
   </div>
 
   <div class="stats-cards">
@@ -643,7 +657,6 @@ function loadData() {
 
 function saveData() { 
   try { 
-    localStorage.setItem('numStats_v23', JSON.stringify(data));
     localStorage.setItem('numStats_v24', JSON.stringify(data));
   } catch(e) {} 
 }
@@ -1352,7 +1365,6 @@ function saveRecord(period, winNum) {
   
   historyData.unshift(record);
   try { 
-    localStorage.setItem('history_v23', JSON.stringify(historyData));
     localStorage.setItem('history_v24', JSON.stringify(historyData));
   } catch(e) {}
   refreshHistory();
@@ -1389,10 +1401,18 @@ function toggleExportPanel() {
 }
 
 function exportCSV() {
-  let lines = ['号码,生肖,累计,波色'];
+  let odds = parseFloat(document.getElementById('oddsInput').value) || currentOdds || 47.5;
+  let totalPool = 0; for(let n=1;n<=49;n++) totalPool += (data[n]||0);
+  let lines = ['号码,生肖,累计,波色,单双,大小,尾数,频率,净收'];
   for(let n=1;n<=49;n++) {
+    let b = data[n]||0; if(b<=0) continue;
     let wave = RED.has(n) ? '红' : (BLUE.has(n) ? '蓝' : '绿');
-    lines.push(`${n},${ZODIAC_MAP[n]},${data[n]||0},${wave}`);
+    let sd = n%2===1?'单':'双';
+    let dx = n>=25?'大':'小';
+    let tail = n%10;
+    let freq = getFrequency(n);
+    let net = Math.round(totalPool - b*odds);
+    lines.push([n, ZODIAC_MAP[n], b, wave, sd, dx, tail, freq, net].join(','));
   }
   downloadFile('号码统计_' + new Date().toISOString().slice(0,10) + '.csv', lines.join('\n'), 'text/csv');
   showToast('✅ CSV 已导出', 'success');
@@ -1453,12 +1473,74 @@ function showToast(msg, type = 'success') {
 }
 
 function copyStats() {
-  let lines = ['号码\t生肖\t累计\t波色'];
-  for(let n=1;n<=49;n++) {
-    let wave = RED.has(n) ? '红' : (BLUE.has(n) ? '蓝' : '绿');
-    if(data[n]>0) lines.push(`${String(n).padStart(2,'0')}\t${ZODIAC_MAP[n]}\t${data[n]}\t${wave}`);
+  let odds = parseFloat(document.getElementById('oddsInput').value) || currentOdds || 47.5;
+  let totalPool = 0, numCount = 0, maxBet = 0, maxBetN = 0, redSum = 0, blueSum = 0, greenSum = 0;
+  for(let n=1;n<=49;n++){
+    let b = data[n]||0; totalPool += b;
+    if(b>0){ numCount++; if(b>maxBet){ maxBet=b; maxBetN=n; } }
+    if(RED.has(n)) redSum+=b; else if(BLUE.has(n)) blueSum+=b; else greenSum+=b;
   }
-  navigator.clipboard.writeText(lines.join('\n')).then(()=>showToast('✅ 已复制报表', 'success'));
+  let risks = [];
+  for(let n=1;n<=49;n++){ let b=data[n]||0; if(b>0) risks.push({n, res: totalPool - b*odds}); }
+  risks.sort((a,b)=>a.res-b.res);
+  let be = risks.find(r=>r.res>=0);
+  let settle = computeSettlement();
+  let L = [];
+  L.push('===== 1-49 统算报表 =====');
+  L.push('总下注\t'+totalPool+'\t注数\t'+numCount);
+  L.push('波色占比\t红:'+redSum+'\t蓝:'+blueSum+'\t绿:'+greenSum);
+  L.push('最大单注\t'+String(maxBetN).padStart(2,'0')+'号('+maxBet+')'+(be?('\t保本开奖号: 开出≥'+be.n+'即不亏'):''));
+  if(settle.count>0){
+    L.push('---- 历史结算 ----');
+    L.push('期数\t'+settle.count+'\t总投入\t'+settle.totalBet+'\t总派奖\t'+settle.totalPayout);
+    L.push('净盈亏\t'+Math.round(settle.net)+(settle.net>=0?' (盈)':' (亏)')+'\t命中率\t'+(settle.hitRate*100).toFixed(1)+'%');
+  }
+  L.push('---- 投注明细(号码/生肖/累计/波色/单双/大小/尾数/遗漏/净收) ----');
+  L.push('号码\t生肖\t累计\t波色\t单双\t大小\t尾数\t遗漏\t净收');
+  for(let n=1;n<=49;n++){
+    let b=data[n]||0; if(b<=0) continue;
+    let wave = RED.has(n)?'红':(BLUE.has(n)?'蓝':'绿');
+    let sd = n%2===1?'单':'双';
+    let dx = n>=25?'大':'小';
+    let tail = n%10;
+    let omit = omissionOf(n);
+    let net = Math.round(totalPool - b*odds);
+    L.push([String(n).padStart(2,'0'), ZODIAC_MAP[n], b, wave, sd, dx, tail, omit, (net>=0?'+':'')+net].join('\t'));
+  }
+  safeCopy(L.join('\n'));
+}
+
+function omissionOf(n){
+  if(historyData.length===0) return '—';
+  for(let i=0;i<historyData.length;i++){ if(historyData[i].winNum===n) return i; }
+  return historyData.length;
+}
+
+function computeSettlement(){
+  let totalBet=0, totalPayout=0, hit=0;
+  historyData.forEach(h=>{ totalBet += (h.totalPool||0); totalPayout += (h.payout||0); if(h.data && (h.data[h.winNum]||0)>0) hit++; });
+  let count = historyData.length;
+  return {count, totalBet, totalPayout, net: totalBet-totalPayout, hitRate: count? hit/count : 0};
+}
+
+function safeCopy(text){
+  function fallback(){
+    try{
+      let ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.top='-9999px'; ta.style.left='0'; document.body.appendChild(ta); ta.focus(); ta.select();
+      let ok=document.execCommand('copy'); document.body.removeChild(ta);
+      if(ok){ showToast('✅ 已复制报表','success'); return; }
+    }catch(e){}
+    showReportModal(text);
+  }
+  if(navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext){
+    navigator.clipboard.writeText(text).then(()=>showToast('✅ 已复制报表','success')).catch(()=>fallback());
+  } else { fallback(); }
+}
+
+function showReportModal(text){
+  let m=document.getElementById('reportModal'); if(!m) return;
+  document.getElementById('reportText').value=text;
+  m.classList.add('show');
 }
 
 // ================= 事件绑定 =================
