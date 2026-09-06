@@ -48,7 +48,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#05050A">
-<title>1-49号码统计系统 v30 平特肖头尾版</title>
+<title>1-49号码统计系统 v30.4 平特肖独立账本</title>
 <style>
 :root {
   --bg: #05050A; --card-bg: rgba(20, 20, 35, 0.9); --border: #2A2A40;
@@ -273,7 +273,7 @@ body {
 
 <div class="app-header">
   <div class="header-top">
-    <span class="app-title">🔢 1-49 统算中心 v30 平特肖头尾版</span>
+    <span class="app-title">🔢 1-49 统算中心 v30.4 平特肖独立账本</span>
     <span style="font-size:10px;color:#666;">AI 增强</span>
   </div>
   <div class="total-display">
@@ -443,6 +443,8 @@ body {
         <span style="font-size:12px;color:#fff;font-weight:bold;">🧧 其他肖带本赔</span>
         <input type="number" id="otherOddsInput" value="2" step="0.1" style="width:55px;background:#222;border:1px solid #555;color:#FFD700;padding:3px;border-radius:4px;text-align:center;font-weight:bold;">
         <button class="export-btn" onclick="renderPtx()">刷新</button>
+        <button class="export-btn" onclick="typeCmd('平特肖 ')">＋平特肖</button>
+        <button class="export-btn" onclick="typeCmd('清平特肖')">清空平特肖</button>
       </div>
       <div id="ptxContent"></div>
     </div>
@@ -494,11 +496,23 @@ const EVEN_NUMS = [2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44
 const TAIL_NUMS = {0:[10,20,30,40],1:[1,11,21,31,41],2:[2,12,22,32,42],3:[3,13,23,33,43],4:[4,14,24,34,44],5:[5,15,25,35,45],6:[6,16,26,36,46],7:[7,17,27,37,47],8:[8,18,28,38,48],9:[9,19,29,39,49]};
 const HEAD_NUMS = {0:[1,2,3,4,5,6,7,8,9],1:[10,11,12,13,14,15,16,17,18,19],2:[20,21,22,23,24,25,26,27,28,29],3:[30,31,32,33,34,35,36,37,38,39],4:[40,41,42,43,44,45,46,47,48,49]};
 
-let data = {};
+let data = {};            // 特码 per-number 下注（与平特肖完全独立）
 let historyData = [];
 let currentOdds = 47.5;
 let parseLog = [];
 let undoStack = [];
+let ptxBets = {};        // 平特肖下注：ptxBets[生肖] = 金额（独立账本）
+
+function loadPtx() {
+  try {
+    const saved = localStorage.getItem('ptx_v1');
+    if (saved) ptxBets = JSON.parse(saved) || {};
+  } catch(e) {}
+  if (!ptxBets || typeof ptxBets !== 'object') ptxBets = {};
+}
+function savePtx() {
+  try { localStorage.setItem('ptx_v1', JSON.stringify(ptxBets)); } catch(e) {}
+}
 let currentFreqTab = 'hot';
 
 // ================= UI 交互 =================
@@ -708,6 +722,26 @@ function processBatch(text) {
     .replace(/[，、;；:：~～]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+
+  // ===== 平特肖指令（独立账本，与特码 per-number 不混算） =====
+  if (/平特肖/.test(clean)) {
+    if (/(清|空|清零|重置).*平特肖|清平特肖|平特肖.*(清|空|重置)/.test(clean)) {
+      ptxBets = {}; savePtx();
+      results.push('平特肖已清空'); finishParse(results); return;
+    }
+    let any = false;
+    let ptxZd = /([鼠牛虎兔龙蛇马羊猴鸡狗猪])\s*(\d+)/g, pz;
+    while ((pz = ptxZd.exec(clean)) !== null) {
+      let z = pz[1], v = parseInt(pz[2]);
+      if (ZODIAC_NUMBERS[z] && v >= 0) { ptxBets[z] = (ptxBets[z]||0) + v; results.push(`平特肖${z}+${v}`); any = true; }
+    }
+    let ptxSub = /([鼠牛虎兔龙蛇马羊猴鸡狗猪])\s*[\-—减]\s*(\d+)/g, ps;
+    while ((ps = ptxSub.exec(clean)) !== null) {
+      let z = ps[1], v = parseInt(ps[2]);
+      if (ZODIAC_NUMBERS[z] && v >= 0) { ptxBets[z] = Math.max(0, (ptxBets[z]||0) - v); results.push(`平特肖${z}-${v}`); any = true; }
+    }
+    if (any) { savePtx(); finishParse(results); return; }
+  }
   
   // ===== 核心策略 1：批量解析"X 各/每个数/= Y"格式 =====
   // 支持: 蓝双各5 | 小数各5 | 牛蛇马各5 | 10+20各5 | 21+45+12每个数50 | =50 | 各数50 | 各50
@@ -869,27 +903,33 @@ function processBatch(text) {
       }
     }
     
-    // 匹配"X-数字"格式
-    m = clean.match(/(.+?)\s*[\-—减]\s*(\d+)/);
-    if (m) {
-      let subject = m[1], val = parseInt(m[2]);
-      let zodiacs = subject.match(/[鼠牛虎兔龙蛇马羊猴鸡狗猪]/g);
-      if (zodiacs) {
-        zodiacs.forEach(z => {
-          if (ZODIAC_NUMBERS[z]) {
-            ZODIAC_NUMBERS[z].forEach(n => { data[n] = Math.max(0, (data[n]||0) - val); });
-            results.push(`${z}减${val}`);
+    // 多条减法指令逐一识别："1-100 2-50" / "牛-50 鼠-30"（修复原先只处理第一条）
+    let subTokens = clean.match(/([\d鼠牛虎兔龙蛇马羊猴鸡狗猪]+(?:\+[\d鼠牛虎兔龙蛇马羊猴鸡狗猪]+)*)\s*[\-—减]\s*(\d+)/g);
+    if (subTokens && subTokens.length > 0) {
+      let any = false;
+      subTokens.forEach(tok => {
+        let parts = tok.match(/^(.+?)\s*[\-—减]\s*(\d+)$/);
+        if (!parts) return;
+        let subject = parts[1], val = parseInt(parts[2]);
+        if (isNaN(val) || val <= 0) return;
+        let zodiacs = subject.match(/[鼠牛虎兔龙蛇马羊猴鸡狗猪]/g);
+        if (zodiacs) {
+          zodiacs.forEach(z => {
+            if (ZODIAC_NUMBERS[z]) {
+              ZODIAC_NUMBERS[z].forEach(n => { data[n] = Math.max(0, (data[n]||0) - val); });
+              results.push(`${z}减${val}`); any = true;
+            }
+          });
+        } else {
+          let nums = subject.replace(/[+\.]/g, ' ').match(/\d+/g);
+          if (nums && nums.length > 0) {
+            nums = nums.map(Number).filter(n => n >= 1 && n <= 49);
+            nums.forEach(n => { data[n] = Math.max(0, (data[n]||0) - val); });
+            results.push(`${nums.join(',')}减${val}`); any = true;
           }
-        });
-      } else {
-        let nums = subject.replace(/[+\.]/g, ' ').match(/\d+/g);
-        if (nums && nums.length > 0) {
-          nums = nums.map(Number).filter(n => n >= 1 && n <= 49);
-          nums.forEach(n => { data[n] = Math.max(0, (data[n]||0) - val); });
-          results.push(`${nums.join(',')}减${val}`);
         }
-      }
-      if (results.length > 0) { finishParse(results); return; }
+      });
+      if (any) { finishParse(results); return; }
     }
   }
   
@@ -907,8 +947,8 @@ function processBatch(text) {
   }
   
   // ===== 核心策略 5：纯号码 + 注数 =====
-  // 支持"21+45 50"这种没写“各”的格式
-  m = clean.match(/^([\d+\s,，.、]+)\s*(\d+)$/);
+  // 支持"21+45 50"这种没写“各”的格式；非贪婪避免把"1 100"咬成金额0
+  m = clean.match(/^([\d+\s,，.、]+?)\s*(\d+)$/);
   if (m) {
     let nums = m[1].replace(/[+\.]/g, ' ').match(/\d+/g).map(Number).filter(n => n >= 1 && n <= 49);
     let val = parseInt(m[2]);
@@ -942,7 +982,8 @@ function executeCmd() {
   let input = document.getElementById('cmdInput');
   let cmd = input.value.trim(); input.value = '';
   if(!cmd) return;
-  if(/^清/.test(cmd)) { clearAll(); return; }
+  if(/平特肖/.test(cmd)) { processBatch(cmd); return; }  // 平特肖指令优先，避免被「清」前缀误清空
+  if(/^清(?!平特肖)/.test(cmd)) { clearAll(); return; }
   processBatch(cmd);
 }
 
@@ -1089,13 +1130,14 @@ function renderMissingMatrix() {
 function renderPtx() {
   let horseOdds = parseFloat(document.getElementById('horseOddsInput').value) || 1.8;
   let otherOdds = parseFloat(document.getElementById('otherOddsInput').value) || 2;
-  let totalPool = 0; for(let n=1;n<=49;n++) totalPool += (data[n]||0);
+  // 平特肖独立账本：只取 ptxBets，与特码 data 完全不混
+  let totalPool = 0; for(let z in ptxBets) if(ptxBets[z] > 0) totalPool += ptxBets[z];
   let rows = [];
   let order = '鼠牛虎兔龙蛇马羊猴鸡狗猪';
   for(let i=0;i<order.length;i++){
     let z = order[i];
     let nums = ZODIAC_NUMBERS[z];
-    let betZ = 0; nums.forEach(n => betZ += (data[n]||0));
+    let betZ = ptxBets[z] || 0;
     if (betZ > 0) {
       let odds = (z === '马') ? horseOdds : otherOdds;
       let payout = Math.round(betZ * odds);
@@ -1107,22 +1149,22 @@ function renderPtx() {
   }
   rows.sort((a,b)=>b.betZ - a.betZ);
   let html = '';
-  // 顶部四张卡：总下注 / 马赔率 / 其他赔率 / 有投生肖
+  // 顶部四张卡：平特肖总下注 / 马带本赔 / 其他赔率 / 有投生肖
   html += '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;">';
-  html += `<div style="flex:1;min-width:90px;background:#111;border:1px solid #333;border-radius:8px;padding:8px;"><div style="font-size:11px;color:#888;">总下注</div><div style="font-size:18px;font-weight:900;color:#fff;">${totalPool}</div></div>`;
+  html += `<div style="flex:1;min-width:90px;background:#111;border:1px solid #333;border-radius:8px;padding:8px;"><div style="font-size:11px;color:#888;">平特肖总下注</div><div style="font-size:18px;font-weight:900;color:#fff;">${totalPool}</div></div>`;
   html += `<div style="flex:1;min-width:90px;background:#111;border:1px solid #333;border-radius:8px;padding:8px;"><div style="font-size:11px;color:#888;">🐴 马带本赔</div><div style="font-size:18px;font-weight:900;color:#FFD700;">${horseOdds.toFixed(1)}</div></div>`;
   html += `<div style="flex:1;min-width:90px;background:#111;border:1px solid #333;border-radius:8px;padding:8px;"><div style="font-size:11px;color:#888;">🧧 其他肖带本赔</div><div style="font-size:18px;font-weight:900;color:#FFD700;">${otherOdds.toFixed(1)}</div></div>`;
   html += `<div style="flex:1;min-width:90px;background:#111;border:1px solid #333;border-radius:8px;padding:8px;"><div style="font-size:11px;color:#888;">有投生肖</div><div style="font-size:18px;font-weight:900;color:#fff;">${rows.length}/12</div></div>`;
   html += '</div>';
   // 算法说明
   html += `<div style="font-size:11px;color:#888;margin-bottom:10px;line-height:1.6;padding:6px 10px;background:#1a1a25;border-left:3px solid var(--gold);border-radius:4px;">`;
-  html += `📒 <b style="color:var(--gold);">平特肖净收</b> = (生肖累计下注 × 该肖带本赔) − <b>总下注</b><br>`;
+  html += `📒 <b style="color:var(--gold);">平特肖净收</b> = (生肖下注额 × 该肖带本赔) − <b>平特肖总下注</b><br>`;
   html += `&nbsp;&nbsp;• 马带本赔 <b style="color:#FFD700;">${horseOdds.toFixed(1)}</b>，其他生肖带本赔 <b style="color:#FFD700;">${otherOdds.toFixed(1)}</b><br>`;
-  html += `&nbsp;&nbsp;• <b style="color:#00FF88;">保本线</b> = 总下注 ÷ 该肖赔率；累计下注 ≥ 保本线即不亏 ✅<br>`;
-  html += `&nbsp;&nbsp;• 绿=净收≥0（赚），红=净收&lt;0（亏）`;
+  html += `&nbsp;&nbsp;• <b style="color:#00FF88;">保本线</b> = 平特肖总下注 ÷ 该肖赔率；生肖下注额 ≥ 保本线即不亏 ✅<br>`;
+  html += `&nbsp;&nbsp;• 数据来源：平特肖指令（与特码 per-number 完全独立两本账）`;
   html += `</div>`;
   if (rows.length === 0) {
-    html += `<div style="text-align:center;color:#888;padding:36px;background:#fff5;border-radius:8px;border:1px dashed #555;">暂无投注生肖 — 执行任意指令后这里会出现统计</div>`;
+    html += `<div style="text-align:center;color:#888;padding:36px;background:#fff5;border-radius:8px;border:1px dashed #555;">暂无平特肖投注 — 指令如「平特肖 鼠 100」后这里会出现统计</div>`;
   } else {
     // 纸面表
     html += '<div style="overflow-x:auto;border:1px solid #444;border-radius:8px;background:#FAFAFA;">';
@@ -1132,7 +1174,7 @@ function renderPtx() {
     html += '<th style="border:1px solid #888;padding:6px;text-align:left;">号&nbsp;&nbsp;码</th>';
     html += '<th style="border:1px solid #888;padding:6px;width:42px;">生肖</th>';
     html += '<th style="border:1px solid #888;padding:6px;width:50px;background:#FFF3D0;">带本赔</th>';
-    html += '<th style="border:1px solid #888;padding:6px;width:72px;">累计下注</th>';
+    html += '<th style="border:1px solid #888;padding:6px;width:72px;">下注额</th>';
     html += '<th style="border:1px solid #888;padding:6px;width:58px;">占比</th>';
     html += '<th style="border:1px solid #888;padding:6px;width:72px;">派奖(若中)</th>';
     html += '<th style="border:1px solid #888;padding:6px;width:90px;">净收(若中)</th>';
@@ -1695,7 +1737,7 @@ document.addEventListener('click', function(e) {
 });
 
 // ================= 初始化 =================
-loadData(); renderGrid(); updateStats();
+loadData(); loadPtx(); renderGrid(); updateStats();
 </script>
 </body>
 </html>
