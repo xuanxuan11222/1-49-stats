@@ -1,0 +1,1481 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<script>
+/* ===== 防崩加固 v2 (璇璇妹添加) ===== */
+(function(){
+  // 1) 安全 localStorage：读写异常一律退回内存，绝不抛错白屏
+  try{
+    var _mem={};
+    var _native=window.localStorage;
+    var safeLS={
+      _m:_mem,
+      get length(){try{return _native.length;}catch(e){return Object.keys(_mem).length;}},
+      key:function(i){try{return _native.key(i);}catch(e){return Object.keys(_mem)[i]||null;}},
+      getItem:function(k){try{return _native.getItem(k);}catch(e){return (_mem[k]!==undefined)?_mem[k]:null;}},
+      setItem:function(k,v){try{_native.setItem(k,String(v));}catch(e){_mem[k]=String(v);}},
+      removeItem:function(k){try{_native.removeItem(k);}catch(e){delete _mem[k];}},
+      clear:function(){try{_native.clear();}catch(e){_mem={};}}
+    };
+    // 仅当原生 localStorage 会抛错时才覆盖（隐私模式/沙箱等）
+    try{_native.setItem('__t','1');_native.removeItem('__t');}
+    catch(e){Object.defineProperty(window,'localStorage',{value:safeLS,configurable:true});}
+    window.__safeLS=safeLS;
+  }catch(e){}
+
+  // 2) 全局错误显示：不再静默白屏，报错直接可见
+  function showErr(msg){
+    var b=document.getElementById('__errBox');
+    if(!b){
+      b=document.createElement('div');b.id='__errBox';
+      b.style.cssText='position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;background:#2A0D0D;color:#ffb4b4;border:1px solid #ff5252;border-radius:8px;padding:10px;font:12px/1.5 monospace;white-space:pre-wrap;max-height:55vh;overflow:auto;';
+      (document.body||document.documentElement).appendChild(b);
+    }
+    b.textContent+='\n[报错] '+msg;
+  }
+  window.addEventListener('error',function(ev){
+    showErr((ev.message||'未知错误')+(ev.filename?(' @ '+ev.filename.split('/').pop()+':'+ev.lineno):''));
+  });
+  window.addEventListener('unhandledrejection',function(ev){
+    var r=ev.reason;showErr('Promise未处理: '+(r&&r.message?r.message:r));
+  });
+  window.__showErr=showErr;
+})();
+</script>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#05050A">
+<title>1-49号码统计系统 v27.0 超级分析版</title>
+<style>
+:root {
+  --bg: #05050A; --card-bg: rgba(20, 20, 35, 0.9); --border: #2A2A40;
+  --primary: #00D4FF; --text: #EAEAEA; --gold: #FFD700;
+  --green: #00FF88; --red: #FF4D4D;
+  --btn-wave-red: linear-gradient(135deg, #E74C3C 0%, #C0392B 100%);
+  --btn-wave-blue: linear-gradient(135deg, #3498DB 0%, #2980B9 100%);
+  --btn-wave-green: linear-gradient(135deg, #2ECC71 0%, #27AE60 100%);
+  --btn-action: linear-gradient(135deg, #F39C12 0%, #D35400 100%);
+  --btn-num: #252535; --radius: 16px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Rounded", "PingFang SC", "Microsoft YaHei", sans-serif;
+  padding: 0 0 20px 0; min-height: 100vh; padding-top: env(safe-area-inset-top);
+  background-image: radial-gradient(circle at 50% 0%, #151525 0%, #05050A 70%);
+}
+
+/* 顶部 */
+.app-header {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(5, 5, 10, 0.95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  padding: 10px 15px; border-bottom: 1px solid var(--border);
+}
+.header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.app-title { font-size: 14px; font-weight: 800; color: var(--primary); }
+.total-display {
+  background: #0A0A15; border: 1px solid #333; border-radius: 10px; padding: 6px 12px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.total-display .label { color: #888; font-size: 12px; }
+.total-display .val { font-size: 22px; font-weight: 900; color: var(--red); }
+
+/* 主内容 */
+.main-content { display: flex; flex-direction: column; gap: 12px; padding: 12px; }
+
+/* 输入区 */
+.input-zone { background: transparent; display: flex; flex-direction: column; gap: 8px; position: relative; }
+.cmd-box { display: flex; gap: 6px; }
+.cmd-box input {
+  flex: 1; background: #111; border: 1px solid #333; border-radius: 10px;
+  padding: 10px 12px; color: #fff; font-size: 16px; outline: none; font-weight: 500;
+}
+.cmd-box button {
+  background: var(--primary); color: #000; border: none; border-radius: 10px;
+  padding: 0 14px; font-weight: 800; font-size: 14px; cursor: pointer;
+}
+.cmd-box button.undo { background: #E67E22; color: #fff; }
+.log-box { color: #666; font-size: 10px; padding: 4px; background: #000; border-radius: 6px; border: 1px solid #222; min-height: 20px; white-space: nowrap; overflow-x: auto; }
+
+/* 输入建议 */
+.suggestions {
+  position: absolute; top: 100%; left: 0; right: 60px; background: #1a1a2e;
+  border: 1px solid #333; border-radius: 8px; max-height: 150px; overflow-y: auto;
+  z-index: 200; display: none;
+}
+.suggestions.show { display: block; }
+.suggestion-item {
+  padding: 8px 12px; cursor: pointer; font-size: 13px; border-bottom: 1px solid #222;
+}
+.suggestion-item:hover, .suggestion-item.active { background: #252540; color: var(--primary); }
+.suggestion-item span { color: #666; font-size: 11px; margin-left: 8px; }
+
+/* 快捷键盘 */
+.quick-pad {
+  background: var(--card-bg); border-radius: var(--radius); padding: 10px;
+  border: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px;
+}
+.pad-row { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.pad-row::-webkit-scrollbar { display: none; }
+.q-btn {
+  flex: 1; min-width: 55px; height: 34px; border: none; border-radius: 8px;
+  color: #fff; font-weight: 800; font-size: 12px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform 0.1s; box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+.q-btn:active { transform: scale(0.95); }
+.btn-red { background: var(--btn-wave-red); }
+.btn-blue { background: var(--btn-wave-blue); }
+.btn-green { background: var(--btn-wave-green); }
+.btn-act { background: var(--btn-action); color: #fff; }
+.btn-num { background: var(--btn-num); border: 1px solid #444; }
+.btn-func { background: #444; color: #ccc; }
+
+/* 统计概览卡片 */
+.stats-cards {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+}
+.stat-card {
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px;
+  padding: 10px; text-align: center;
+}
+.stat-card .label { font-size: 10px; color: #888; margin-bottom: 4px; }
+.stat-card .value { font-size: 18px; font-weight: 900; }
+.stat-card .value.green { color: var(--green); }
+.stat-card .value.red { color: var(--red); }
+.stat-card .value.gold { color: var(--gold); }
+.stat-card .value.blue { color: var(--primary); }
+
+/* 网格 */
+.grid-wrap { overflow-x: auto; padding-bottom: 10px; -webkit-overflow-scrolling: touch; }
+.num-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; min-width: 500px; }
+.num-card {
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 6px 2px; text-align: center; display: flex; flex-direction: column;
+  align-items: center; gap: 2px; position: relative; transition: all 0.2s;
+}
+.num-card .num { font-size: 17px; font-weight: 900; }
+.num-card .zodiac { font-size: 9px; font-weight: 800; background: #000; padding: 1px 3px; border-radius: 3px; }
+.num-card .total { font-size: 12px; font-weight: 900; color: var(--gold); background: #111; padding: 2px 6px; border-radius: 3px; width: 100%; margin-top: 1px; }
+.num-card .freq { position: absolute; top: 2px; right: 2px; font-size: 8px; color: #666; }
+
+.heat-safe { border-color: var(--green); box-shadow: 0 0 6px rgba(0, 255, 136, 0.2); }
+.heat-danger { border-color: var(--red); box-shadow: 0 0 6px rgba(255, 77, 77, 0.2); }
+.heat-hot { background: rgba(255, 77, 77, 0.15); }
+.heat-cold { background: rgba(0, 212, 255, 0.1); }
+
+/* 风险预警 */
+.risk-alert {
+  background: linear-gradient(135deg, #2A1515 0%, #1A0A0A 100%);
+  border: 1px solid var(--red); border-radius: 10px; padding: 10px;
+  display: flex; align-items: center; gap: 8px;
+}
+.risk-alert.warning {
+  background: linear-gradient(135deg, #2A2A15 0%, #1A1A0A 100%);
+  border-color: #F39C12;
+}
+.risk-alert.safe {
+  background: linear-gradient(135deg, #152A15 0%, #0A1A0A 100%);
+  border-color: var(--green);
+}
+.risk-alert .icon { font-size: 20px; }
+.risk-alert .msg { font-size: 12px; flex: 1; }
+.risk-alert .close { cursor: pointer; color: #666; font-size: 16px; }
+
+/* 分析面板 */
+.analysis-section {
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden; display: flex; flex-direction: column;
+}
+.analysis-header {
+  padding: 10px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center;
+  cursor: pointer;
+}
+.analysis-header h3 { font-size: 13px; color: var(--gold); font-weight: 900; }
+.analysis-body { padding: 10px; display: none; }
+.analysis-body.show { display: block; }
+
+/* 频率表格 */
+.freq-table { width: 100%; font-size: 11px; border-collapse: collapse; }
+.freq-table th { color: #888; font-weight: 600; padding: 6px 4px; text-align: left; border-bottom: 1px solid #333; }
+.freq-table td { padding: 6px 4px; border-bottom: 1px solid #222; }
+.freq-table tr:hover { background: #1a1a2e; }
+.freq-hot { color: var(--red); font-weight: 700; }
+.freq-cold { color: var(--primary); font-weight: 700; }
+.freq-bar { height: 4px; background: #333; border-radius: 2px; overflow: hidden; }
+.freq-bar-fill { height: 100%; background: var(--gold); transition: width 0.3s; }
+
+/* 图表容器 */
+.chart-container { position: relative; height: 280px; margin: 10px 0; }
+.chart-svg { width: 100%; height: 100%; }
+
+/* 统计面板 */
+.stats-section {
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden; display: flex; flex-direction: column; max-height: 400px;
+}
+.stats-header { padding: 10px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
+.stats-header h3 { font-size: 13px; color: var(--gold); font-weight: 900; }
+.risk-list { overflow-y: auto; flex: 1; padding: 5px; }
+.risk-item {
+  display: grid; grid-template-columns: 28px 35px 45px 45px; gap: 4px;
+  padding: 6px 4px; background: #111; margin-bottom: 3px; border-radius: 4px; font-size: 12px; align-items: center;
+}
+.risk-item.danger { background: #2A1515; border-left: 3px solid var(--red); }
+.risk-item.safe { background: #152A20; border-left: 3px solid var(--green); }
+.risk-res { font-weight: 900; text-align: right; }
+.risk-res.profit { color: var(--green); } .risk-res.loss { color: var(--red); }
+
+/* 历史记录 */
+.history-section { margin-top: 10px; border-top: 1px solid #333; padding-top: 10px; }
+.hist-item {
+  background: var(--card-bg); border: 1px solid #333; border-radius: 6px;
+  padding: 8px; margin-bottom: 5px; font-size: 11px;
+}
+.hist-row { display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 2px; }
+.wave-red { color: #E74C3C; } .wave-blue { color: #3498DB; } .wave-green { color: #27AE60; }
+
+/* Toast 提示 */
+.toast {
+  position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.9); color: #fff; padding: 10px 20px; border-radius: 20px;
+  font-size: 13px; z-index: 9999; opacity: 0; transition: opacity 0.3s;
+  pointer-events: none; max-width: 80%; text-align: center;
+}
+.toast.show { opacity: 1; }
+.toast.success { border: 1px solid var(--green); }
+.toast.error { border: 1px solid var(--red); }
+.toast.warning { border: 1px solid #F39C12; }
+
+/* 数据导出面板 */
+.export-panel {
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 12px; display: none;
+}
+.export-panel.show { display: block; }
+.export-btn {
+  background: #333; color: #fff; border: none; border-radius: 8px;
+  padding: 8px 12px; font-size: 12px; cursor: pointer; margin: 4px;
+}
+.export-btn:hover { background: #444; }
+</style>
+</head>
+<body>
+
+<div class="app-header">
+  <div class="header-top">
+    <span class="app-title">🔢 1-49 统算中心 v27.0 超级分析版</span>
+    <span style="font-size:10px;color:#666;">AI 增强</span>
+  </div>
+  <div class="total-display">
+    <span class="label">总下注</span>
+    <span class="val" id="grandTotal">0</span>
+  </div>
+</div>
+
+<div class="main-content">
+  
+  <div class="input-zone">
+    <div class="cmd-box">
+      <input type="text" id="cmdInput" placeholder='指令: "10 20 各 50" 或 "大 50"' autocomplete="off">
+      <button onclick="executeCmd()">执行</button>
+      <button class="undo" onclick="undoLast()">↩</button>
+    </div>
+    <div class="suggestions" id="suggestions"></div>
+    <div class="log-box" id="logBox">等待指令...</div>
+  </div>
+
+  <div id="riskAlert"></div>
+
+  <div class="quick-pad">
+    <div class="pad-row">
+      <button class="q-btn btn-red" onclick="typeCmd('红单 ')">红单</button>
+      <button class="q-btn btn-red" onclick="typeCmd('红双 ')">红双</button>
+      <button class="q-btn btn-blue" onclick="typeCmd('蓝单 ')">蓝单</button>
+      <button class="q-btn btn-blue" onclick="typeCmd('蓝双 ')">蓝双</button>
+      <button class="q-btn btn-green" onclick="typeCmd('绿单 ')">绿单</button>
+      <button class="q-btn btn-green" onclick="typeCmd('绿双 ')">绿双</button>
+    </div>
+    <div class="pad-row">
+      <button class="q-btn btn-act" onclick="typeCmd('大数 ')">大数</button>
+      <button class="q-btn btn-act" onclick="typeCmd('小数 ')">小数</button>
+      <button class="q-btn btn-act" onclick="typeCmd('单 ')">全单</button>
+      <button class="q-btn btn-act" onclick="typeCmd('双 ')">全双</button>
+      <button class="q-btn btn-act" onclick="typeCmd('0 尾 ')">0 尾</button>
+      <button class="q-btn btn-act" onclick="typeCmd('5 尾 ')">5 尾</button>
+    </div>
+    <div class="pad-row">
+      <button class="q-btn btn-num" onclick="typeCmd('牛 ')">牛</button>
+      <button class="q-btn btn-num" onclick="typeCmd('虎 ')">虎</button>
+      <button class="q-btn btn-num" onclick="typeCmd('兔 ')">兔</button>
+      <button class="q-btn btn-num" onclick="typeCmd('龙 ')">龙</button>
+      <button class="q-btn btn-num" onclick="typeCmd('蛇 ')">蛇</button>
+      <button class="q-btn btn-num" onclick="typeCmd('马 ')">马</button>
+      <button class="q-btn btn-num" onclick="typeCmd('羊 ')">羊</button>
+    </div>
+    <div class="pad-row">
+       <button class="q-btn btn-num" onclick="typeCmd('猴 ')">猴</button>
+      <button class="q-btn btn-num" onclick="typeCmd('鸡 ')">鸡</button>
+      <button class="q-btn btn-num" onclick="typeCmd('狗 ')">狗</button>
+      <button class="q-btn btn-num" onclick="typeCmd('猪 ')">猪</button>
+      <button class="q-btn btn-num" onclick="typeCmd('鼠 ')">鼠</button>
+      <button class="q-btn btn-func" onclick="openBatchPaste()">📋 粘贴</button>
+    </div>
+    <div class="pad-row" style="border-top: 1px solid #333; padding-top: 6px; margin-top: 2px;">
+       <button class="q-btn" style="background:#555; width:40px; flex:none;" onclick="clearCmd()">⌫</button>
+       <button class="q-btn btn-func" onclick="typeCmd('各数 ')">各数</button>
+       <button class="q-btn btn-func" onclick="typeCmd('= ')">=</button>
+       <button class="q-btn btn-func" style="flex:2" onclick="copyStats()">📑 复制报表</button>
+       <button class="q-btn" style="background:#E74C3C" onclick="clearAll()">🗑️ 清空</button>
+       <button class="q-btn btn-func" onclick="toggleExportPanel()">📥 导出</button>
+    </div>
+  </div>
+
+  <div class="export-panel" id="exportPanel">
+    <div style="margin-bottom:8px;color:var(--gold);font-weight:700;">📥 数据导出</div>
+    <button class="export-btn" onclick="exportCSV()">导出 CSV</button>
+    <button class="export-btn" onclick="exportJSON()">导出 JSON</button>
+    <button class="export-btn" onclick="importData()">导入数据</button>
+  </div>
+
+  <div class="stats-cards">
+    <div class="stat-card">
+      <div class="label">已投号码</div>
+      <div class="value blue" id="statNumCount">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">最高单注</div>
+      <div class="value gold" id="statMaxBet">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">风险号码</div>
+      <div class="value red" id="statRiskCount">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">安全号码</div>
+      <div class="value green" id="statSafeCount">0</div>
+    </div>
+  </div>
+
+  <div class="grid-wrap">
+    <div id="gridContainer"></div>
+  </div>
+
+  <div class="analysis-section">
+    <div class="analysis-header" onclick="toggleAnalysis('freq')">
+      <h3>📊 频率分析</h3>
+      <span id="freqToggle">▼</span>
+    </div>
+    <div class="analysis-body" id="freqBody">
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <button class="export-btn" onclick="showFreqTab('hot')" id="btnHot">热号</button>
+        <button class="export-btn" onclick="showFreqTab('cold')" id="btnCold">冷号</button>
+        <button class="export-btn" onclick="showFreqTab('missing')" id="btnMissing">遗漏值</button>
+      </div>
+      <div id="freqContent"></div>
+    </div>
+  </div>
+
+  <div class="analysis-section">
+    <div class="analysis-header" onclick="toggleAnalysis('trend')">
+      <h3>📈 趋势图表</h3>
+      <span id="trendToggle">▼</span>
+    </div>
+    <div class="analysis-body" id="trendBody">
+      <div style="display:flex;gap:8px;margin-bottom:10px;padding:0 10px;flex-wrap:wrap;">
+        <div style="width:100%;font-size:11px;color:var(--gold);font-weight:bold;padding:0 5px;">📈 走势图表</div>
+        <button class="export-btn" onclick="showTrendTab('line')" id="btnTrendLine">盈亏趋势</button>
+        <button class="export-btn" onclick="showTrendTab('bigsmall')" id="btnTrendBigsmall">大小走势</button>
+        <button class="export-btn" onclick="showTrendTab('oddeven')" id="btnTrendOddeven">单双走势</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;padding:0 10px;flex-wrap:wrap;border-top:1px solid #333;padding-top:10px;margin-top:5px;">
+        <div style="width:100%;font-size:11px;color:var(--gold);font-weight:bold;padding:0 5px;">📊 数据统计</div>
+        <button class="export-btn" onclick="showTrendTab('wave')" id="btnTrendWave">波色分布</button>
+        <button class="export-btn" onclick="showTrendTab('oddevenstats')" id="btnTrendOddevenStats">单双分布</button>
+      </div>
+      <div class="chart-container" id="trendChart"></div>
+    </div>
+  </div>
+
+  <div class="stats-section">
+    <div class="stats-header">
+      <h3>📊 盈亏监控</h3>
+      <div style="display:flex;gap:5px;align-items:center;">
+        <span style="font-size:12px;color:#888;">赔率</span>
+        <input type="number" id="oddsInput" value="47.5" step="0.1" style="width:55px;background:#222;border:1px solid #555;color:#fff;padding:3px;border-radius:4px;text-align:center;">
+      </div>
+    </div>
+    <div class="risk-list" id="riskList"></div>
+  </div>
+
+  <div class="history-section">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <span style="color:var(--gold);font-weight:900;">📜 结算历史</span>
+      <button onclick="submitWin()" style="background:var(--gold);color:#000;border:none;padding:4px 8px;border-radius:4px;font-weight:bold;font-size:11px;">🎯 结算</button>
+    </div>
+    <div id="historyList"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ================= 核心配置 =================
+const ZODIAC_MAP = {1:'马',2:'蛇',3:'龙',4:'兔',5:'虎',6:'牛',7:'鼠',8:'猪',9:'狗',10:'鸡',11:'猴',12:'羊',13:'马',14:'蛇',15:'龙',16:'兔',17:'虎',18:'牛',19:'鼠',20:'猪',21:'狗',22:'鸡',23:'猴',24:'羊',25:'马',26:'蛇',27:'龙',28:'兔',29:'虎',30:'牛',31:'鼠',32:'猪',33:'狗',34:'鸡',35:'猴',36:'羊',37:'马',38:'蛇',39:'龙',40:'兔',41:'虎',42:'牛',43:'鼠',44:'猪',45:'狗',46:'鸡',47:'猴',48:'羊',49:'马'};
+const ZODIAC_NUMBERS = {'蛇':[2,14,26,38],'龙':[3,15,27,39],'兔':[4,16,28,40],'虎':[5,17,29,41],'牛':[6,18,30,42],'鼠':[7,19,31,43],'猪':[8,20,32,44],'狗':[9,21,33,45],'鸡':[10,22,34,46],'猴':[11,23,35,47],'羊':[12,24,36,48],'马':[1,13,25,37,49]};
+const ZODIAC_CHARS = '鼠牛虎兔龙蛇马羊猴鸡狗猪';
+const RED = new Set([1,2,7,8,12,13,18,19,23,24,29,30,34,35,40,45,46]);
+const BLUE = new Set([3,4,9,10,14,15,20,25,26,31,36,37,41,42,47,48]);
+const RED_ARR = [1,2,7,8,12,13,18,19,23,24,29,30,34,35,40,45,46];
+const BLUE_ARR = [3,4,9,10,14,15,20,25,26,31,36,37,41,42,47,48];
+const GREEN_ARR = []; for(let n=1;n<=49;n++) if(!RED.has(n)&&!BLUE.has(n)) GREEN_ARR.push(n);
+
+function getWave(n) { if (RED.has(n)) return 'red'; if (BLUE.has(n)) return 'blue'; return 'green'; }
+function getZodiacColor(z) {
+  const m = {鼠:'#1ABC9C',牛:'#3498DB',虎:'#2ECC71',兔:'#9B59B6',龙:'#F39C12',蛇:'#E74C3C',马:'#E67E22',羊:'#16A085',猴:'#C0392B',鸡:'#2980B9',狗:'#27AE60',猪:'#8E44AD'};
+  return m[z] || '#fff';
+}
+
+const BIG_NUMS = [25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49];
+const SMALL_NUMS = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24];
+const ODD_NUMS = [1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,33,35,37,39,41,43,45,47,49];
+const EVEN_NUMS = [2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48];
+const TAIL_NUMS = {0:[10,20,30,40],1:[1,11,21,31,41],2:[2,12,22,32,42],3:[3,13,23,33,43],4:[4,14,24,34,44],5:[5,15,25,35,45],6:[6,16,26,36,46],7:[7,17,27,37,47],8:[8,18,28,38,48],9:[9,19,29,39,49]};
+
+let data = {};
+let historyData = [];
+let currentOdds = 47.5;
+let parseLog = [];
+let undoStack = [];
+let currentFreqTab = 'hot';
+
+// ================= UI 交互 =================
+function typeCmd(text) {
+  const inp = document.getElementById('cmdInput');
+  inp.value += text;
+  inp.focus();
+  hideSuggestions();
+}
+function clearCmd() {
+  const inp = document.getElementById('cmdInput');
+  inp.value = '';
+  inp.focus();
+  hideSuggestions();
+}
+function openBatchPaste() { 
+  let text = prompt("粘贴记录："); 
+  if(text) processBatch(text); 
+}
+
+// ================= 输入建议 =================
+const COMMAND_SUGGESTIONS = [
+  {cmd: '红单 ', desc: '红波单数'},
+  {cmd: '红双 ', desc: '红波双数'},
+  {cmd: '蓝单 ', desc: '蓝波单数'},
+  {cmd: '蓝双 ', desc: '蓝波双数'},
+  {cmd: '绿单 ', desc: '绿波单数'},
+  {cmd: '绿双 ', desc: '绿波双数'},
+  {cmd: '大数 ', desc: '25-49'},
+  {cmd: '小数 ', desc: '1-24'},
+  {cmd: '单 ', desc: '全单'},
+  {cmd: '双 ', desc: '全双'},
+  {cmd: '0 尾 ', desc: '尾数0'},
+  {cmd: '5 尾 ', desc: '尾数5'},
+  {cmd: '鼠 ', desc: '生肖鼠'},
+  {cmd: '牛 ', desc: '生肖牛'},
+  {cmd: '虎 ', desc: '生肖虎'},
+  {cmd: '兔 ', desc: '生肖兔'},
+  {cmd: '龙 ', desc: '生肖龙'},
+  {cmd: '蛇 ', desc: '生肖蛇'},
+  {cmd: '马 ', desc: '生肖马'},
+  {cmd: '羊 ', desc: '生肖羊'},
+  {cmd: '猴 ', desc: '生肖猴'},
+  {cmd: '鸡 ', desc: '生肖鸡'},
+  {cmd: '狗 ', desc: '生肖狗'},
+  {cmd: '猪 ', desc: '生肖猪'},
+  {cmd: '各数 ', desc: '全部号码'},
+  {cmd: '= ', desc: '全部号码'},
+  {cmd: '清空', desc: '清空所有数据'},
+];
+
+function showSuggestions(query) {
+  const box = document.getElementById('suggestions');
+  if (!query) { box.classList.remove('show'); return; }
+  
+  const filtered = COMMAND_SUGGESTIONS.filter(s => 
+    s.cmd.includes(query) || s.desc.includes(query)
+  );
+  
+  if (filtered.length === 0) { box.classList.remove('show'); return; }
+  
+  box.innerHTML = filtered.map((s, i) => 
+    `<div class="suggestion-item${i===0?' active':''}" onclick="applySuggestion('${s.cmd}')">${s.cmd}<span>${s.desc}</span></div>`
+  ).join('');
+  box.classList.add('show');
+}
+
+function hideSuggestions() {
+  document.getElementById('suggestions').classList.remove('show');
+}
+
+function applySuggestion(cmd) {
+  document.getElementById('cmdInput').value = cmd;
+  hideSuggestions();
+  document.getElementById('cmdInput').focus();
+}
+
+// ================= 渲染 =================
+function renderGrid() {
+  let html = '';
+  for(let r=0;r<7;r++) {
+    html += '<div class="num-row">';
+    for(let c=0;c<7;c++) {
+      let n = r*7+c+1; if(n>49) break;
+      let z = ZODIAC_MAP[n];
+      let t = data[n] || 0;
+      let freq = getFrequency(n);
+      let freqClass = freq > 5 ? 'freq-hot' : (freq < 2 ? 'freq-cold' : '');
+      html += `<div class="num-card" id="card_${n}">
+        <span class="freq ${freqClass}">${freq}</span>
+        <span class="num wave-${getWave(n)}">${String(n).padStart(2,'0')}</span>
+        <span class="zodiac" style="color:${getZodiacColor(z)}">${z}</span>
+        <div class="total">${t}</div>
+      </div>`;
+    }
+    html += '</div>';
+  }
+  document.getElementById('gridContainer').innerHTML = html;
+  updateHeatmap();
+}
+
+function getFrequency(n) {
+  let count = 0;
+  historyData.forEach(h => { if(h.winNum === n) count++; });
+  return count;
+}
+
+function updateHeatmap() {
+  let totalPool = 0;
+  for(let n=1;n<=49;n++) totalPool += (data[n]||0);
+  
+  let riskCount = 0, safeCount = 0, maxBet = 0, numCount = 0;
+  
+  for(let n=1;n<=49;n++) {
+    let el = document.getElementById('card_'+n);
+    if(!el) continue;
+    let bet = data[n]||0;
+    el.className = 'num-card'; el.style.background = '';
+    
+    if(bet > 0) {
+      numCount++;
+      if(bet > maxBet) maxBet = bet;
+      let pay = bet * currentOdds;
+      let res = totalPool - pay;
+      if(res >= 0) { 
+        el.classList.add('heat-safe'); 
+        safeCount++;
+      } else { 
+        el.classList.add('heat-danger'); 
+        riskCount++;
+      }
+    }
+    
+    let freq = getFrequency(n);
+    if(freq > 3) el.classList.add('heat-hot');
+    if(freq < 1 && historyData.length > 5) el.classList.add('heat-cold');
+  }
+  
+  document.getElementById('statNumCount').textContent = numCount;
+  document.getElementById('statMaxBet').textContent = maxBet;
+  document.getElementById('statRiskCount').textContent = riskCount;
+  document.getElementById('statSafeCount').textContent = safeCount;
+  
+  checkRiskAlerts(totalPool, riskCount);
+}
+
+function checkRiskAlerts(totalPool, riskCount) {
+  const alertBox = document.getElementById('riskAlert');
+  let alerts = [];
+  
+  if(riskCount > 5) {
+    alerts.push({type: 'danger', msg: `⚠️ ${riskCount}个号码处于亏损状态，建议分散投注`});
+  } else if(riskCount > 2) {
+    alerts.push({type: 'warning', msg: `⚡ ${riskCount}个号码风险较高，注意控制`});
+  }
+  
+  let maxSingle = 0;
+  for(let n=1;n<=49;n++) {
+    if(data[n] > maxSingle) maxSingle = data[n];
+  }
+  if(totalPool > 0 && maxSingle / totalPool > 0.3) {
+    alerts.push({type: 'warning', msg: '💡 单号投注占比过高，建议分散风险'});
+  }
+  
+  if(alerts.length === 0 && totalPool > 0) {
+    alerts.push({type: 'safe', msg: '✅ 投注分布健康'});
+  }
+  
+  alertBox.innerHTML = alerts.map(a => 
+    `<div class="risk-alert ${a.type}">
+      <span class="msg">${a.msg}</span>
+      <span class="close" onclick="this.parentElement.remove()">×</span>
+    </div>`
+  ).join('');
+}
+
+function loadData() {
+  try { 
+    const s = localStorage.getItem('numStats_v23') || localStorage.getItem('numStats_v24'); 
+    if(s) data = JSON.parse(s); else data = {}; 
+  } catch(e) { data = {}; }
+  for(let n=1;n<=49;n++) if(data[n]===undefined) data[n]=0;
+  
+  try {
+    const h = localStorage.getItem('history_v23') || localStorage.getItem('history_v24');
+    if(h) historyData = JSON.parse(h); else historyData = [];
+  } catch(e) { historyData = []; }
+  
+  refreshHistory();
+}
+
+function saveData() { 
+  try { 
+    localStorage.setItem('numStats_v23', JSON.stringify(data));
+    localStorage.setItem('numStats_v24', JSON.stringify(data));
+  } catch(e) {} 
+}
+
+// ================= v25.0 终极指令识别引擎 (修复版) =================
+function processBatch(text) {
+  let results = [];
+  undoStack.push(JSON.stringify(data));
+  
+  // 基础清洗：去除干扰词，统一分隔符
+  // 注意：保留 + 号，因为它是重要的号码分隔符
+  let clean = text
+    .replace(/[文块元期第注下投加]/g, ' ')
+    .replace(/[，、;；:：~～]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  
+  // ===== 核心策略 1：批量解析"X 各/每个数/= Y"格式 =====
+  // 支持: 蓝双各5 | 小数各5 | 牛蛇马各5 | 10+20各5 | 21+45+12每个数50 | =50 | 各数50 | 各50
+  // =、各数、各、每个数 为同一指令，表示对所有匹配对象操作
+  
+  // 先处理"裸关键字+数字"格式（=50、各数50、各50等），因为 (.+?) 需要前面有字符才能匹配
+  let barePattern = /^(各数|各|=|每个数|每个)\s*(\d+)$/;
+  let bareMatch = clean.match(barePattern);
+  if (bareMatch) {
+    let val = parseInt(bareMatch[2]);
+    if (val > 0) {
+      for(let n=1;n<=49;n++) { data[n] = (data[n]||0) + val; }
+      results.push(`全部号码+${val}`);
+      finishParse(results); return;
+    }
+  }
+  
+  let m, batchPattern = /(.+?)\s*(各|每个数|每个|各数|=)\s*(\d+)/g;
+  let foundBatch = false;
+  while ((m = batchPattern.exec(clean)) !== null) {
+    foundBatch = true;
+    let subject = m[1].trim();
+    let val = parseInt(m[3]);
+    if (isNaN(val) || val <= 0) continue;
+    
+    // 处理 subject 中的分隔符（把 + 和 . 变成空格，方便后续提取数字）
+    let numsStr = subject.replace(/[+\.]/g, ' ');
+    let foundNums = numsStr.match(/\d+/g);
+    
+    // 判断类型
+    if (/^[鼠牛虎兔龙蛇马羊猴鸡狗猪]+$/.test(subject)) {
+      // 多生肖 (如"牛蛇马")
+      subject.split('').forEach(z => {
+        if (ZODIAC_NUMBERS[z]) {
+          ZODIAC_NUMBERS[z].forEach(n => { data[n] = (data[n]||0) + val; });
+          results.push(`${z}全+${val}`);
+        }
+      });
+    } else if (/^(红|蓝|绿)(单|双)$/.test(subject)) {
+      // 波色 + 单双 (如"蓝双")
+      let wave = subject[0], oe = subject[1];
+      let waveNums = wave === '红' ? RED_ARR : (wave === '蓝' ? BLUE_ARR : GREEN_ARR);
+      let filtered = oe === '单' ? waveNums.filter(n => n % 2 !== 0) : waveNums.filter(n => n % 2 === 0);
+      filtered.forEach(n => { data[n] = (data[n]||0) + val; });
+      results.push(`${wave}${oe}+${val}`);
+    } else if (/^(大数|小数|全单|全双|单数|双数|单|双)$/.test(subject) || /^\d尾$/.test(subject)) {
+      // 类别 (如"小数"、"5 尾")
+      let nums = [];
+      if (subject.includes('大')) nums = BIG_NUMS;
+      else if (subject.includes('小')) nums = SMALL_NUMS;
+      else if (subject.includes('单')) nums = ODD_NUMS;
+      else if (subject.includes('双')) nums = EVEN_NUMS;
+      else if (subject.includes('尾')) {
+        let tail = parseInt(subject[0]);
+        nums = TAIL_NUMS[tail] || [];
+      }
+      nums.forEach(n => { data[n] = (data[n]||0) + val; });
+      results.push(`${subject}+${val}`);
+    } else if (foundNums && foundNums.length > 0) {
+      // 号码模式 (处理"21+45+12"这种情况)
+      let nums = foundNums.map(Number).filter(n => n >= 1 && n <= 49);
+      if (nums.length > 0) {
+        nums.forEach(n => { data[n] = (data[n]||0) + val; });
+        results.push(`${nums.join(',')}+${val}`);
+      }
+    } else {
+      // 兜底尝试：如果 subject 包含波色关键字
+      let waveMatch = subject.match(/(红|蓝|绿)(单|双)/);
+      if (waveMatch) {
+         let wave = waveMatch[1], oe = waveMatch[2];
+         let waveNums = wave === '红' ? RED_ARR : (wave === '蓝' ? BLUE_ARR : GREEN_ARR);
+         let filtered = oe === '单' ? waveNums.filter(n => n % 2 !== 0) : waveNums.filter(n => n % 2 === 0);
+         filtered.forEach(n => { data[n] = (data[n]||0) + val; });
+         results.push(`${wave}${oe}+${val}`);
+      }
+    }
+  }
+  if (foundBatch && results.length > 0) { finishParse(results); return; }
+
+  // ===== 核心策略 1.5：补充识别"无各字"的类别指令 (如"蓝双 50", "大数 30") =====
+  let singleCatPattern = /^(红|蓝|绿)(单|双)\s*(\d+)$/;
+  let mCat = clean.match(singleCatPattern);
+  if (mCat) {
+    let wave = mCat[1], oe = mCat[2], val = parseInt(mCat[3]);
+    let waveNums = wave === '红' ? RED_ARR : (wave === '蓝' ? BLUE_ARR : GREEN_ARR);
+    let filtered = oe === '单' ? waveNums.filter(n => n % 2 !== 0) : waveNums.filter(n => n % 2 === 0);
+    filtered.forEach(n => { data[n] = (data[n]||0) + val; });
+    results.push(`${wave}${oe}+${val}`);
+    finishParse(results); return;
+  }
+
+  let catPattern = /^(大数|小数|全单|全双|单数|双数|单|双)\s*(\d+)$/;
+  mCat = clean.match(catPattern);
+  if (mCat) {
+    let cat = mCat[1], val = parseInt(mCat[2]);
+    let nums = [];
+    if (cat.includes('大')) nums = BIG_NUMS;
+    else if (cat.includes('小')) nums = SMALL_NUMS;
+    else if (cat.includes('单')) nums = ODD_NUMS;
+    else if (cat.includes('双')) nums = EVEN_NUMS;
+    nums.forEach(n => { data[n] = (data[n]||0) + val; });
+    results.push(`${cat}+${val}`);
+    finishParse(results); return;
+  }
+
+  let tailPattern = /^(\d)尾\s*(\d+)$/;
+  mCat = clean.match(tailPattern);
+  if (mCat) {
+    let tail = parseInt(mCat[1]), val = parseInt(mCat[2]);
+    let nums = TAIL_NUMS[tail] || [];
+    nums.forEach(n => { data[n] = (data[n]||0) + val; });
+    results.push(`${tail}尾+${val}`);
+    finishParse(results); return;
+  }
+  
+  // ===== 核心策略 2：多肖各自配不同数字（如"牛 40 猪 30 蛇 20"） =====
+  let zodiacDigits = [];
+  let zdPattern = /([鼠牛虎兔龙蛇马羊猴鸡狗猪])\s*(\d+)/g;
+  let zdMatch;
+  while ((zdMatch = zdPattern.exec(clean)) !== null) {
+    zodiacDigits.push({ z: zdMatch[1], v: parseInt(zdMatch[2]) });
+  }
+  if (zodiacDigits.length >= 2) {
+    zodiacDigits.forEach(item => {
+      if (item.v > 0 && ZODIAC_NUMBERS[item.z]) {
+        ZODIAC_NUMBERS[item.z].forEach(n => { data[n] = (data[n]||0) + item.v; });
+        results.push(`${item.z}全+${item.v}`);
+      }
+    });
+    finishParse(results); return;
+  }
+  
+  // ===== 核心策略 3：减法（支持全部号码统一减） =====
+  // 支持: 各数-50 | 各-50 | =-50 | 每个数-50 | 1.2.3-50 | 牛-50 | 1+2+3减50
+  // "各数"、"各"、"="、"每个数" 前缀的减法 = 全部49个号码都减
+  if (text.includes('-') || text.includes('—') || text.includes('减')) {
+    // 先匹配"全部减"格式：各数-50 | 各-50 | =-50 | 每个数-50
+    let allSubPattern = /^(各数|各|=|每个数|每个)\s*[\-—减]\s*(\d+)$/;
+    let allSubMatch = clean.match(allSubPattern);
+    if (allSubMatch) {
+      let val = parseInt(allSubMatch[2]);
+      if (val > 0) {
+        for(let n=1;n<=49;n++) { data[n] = Math.max(0, (data[n]||0) - val); }
+        results.push(`全部号码减${val}`);
+        finishParse(results); return;
+      }
+    }
+    
+    // 匹配"X-数字"格式
+    m = clean.match(/(.+?)\s*[\-—减]\s*(\d+)/);
+    if (m) {
+      let subject = m[1], val = parseInt(m[2]);
+      let zodiacs = subject.match(/[鼠牛虎兔龙蛇马羊猴鸡狗猪]/g);
+      if (zodiacs) {
+        zodiacs.forEach(z => {
+          if (ZODIAC_NUMBERS[z]) {
+            ZODIAC_NUMBERS[z].forEach(n => { data[n] = Math.max(0, (data[n]||0) - val); });
+            results.push(`${z}减${val}`);
+          }
+        });
+      } else {
+        let nums = subject.replace(/[+\.]/g, ' ').match(/\d+/g);
+        if (nums && nums.length > 0) {
+          nums = nums.map(Number).filter(n => n >= 1 && n <= 49);
+          nums.forEach(n => { data[n] = Math.max(0, (data[n]||0) - val); });
+          results.push(`${nums.join(',')}减${val}`);
+        }
+      }
+      if (results.length > 0) { finishParse(results); return; }
+    }
+  }
+  
+  // ===== 核心策略 4：单生肖 + 数字 =====
+  m = clean.match(/^([鼠牛虎兔龙蛇马羊猴鸡狗猪]+)\s*(\d+)$/);
+  if (m) {
+    let zodiacs = m[1].split(''), val = parseInt(m[2]);
+    zodiacs.forEach(z => {
+      if (ZODIAC_NUMBERS[z]) {
+        ZODIAC_NUMBERS[z].forEach(n => { data[n] = (data[n]||0) + val; });
+        results.push(`${z}全+${val}`);
+      }
+    });
+    if (results.length > 0) { finishParse(results); return; }
+  }
+  
+  // ===== 核心策略 5：纯号码 + 注数 =====
+  // 支持"21+45 50"这种没写“各”的格式
+  m = clean.match(/^([\d+\s,，.、]+)\s*(\d+)$/);
+  if (m) {
+    let nums = m[1].replace(/[+\.]/g, ' ').match(/\d+/g).map(Number).filter(n => n >= 1 && n <= 49);
+    let val = parseInt(m[2]);
+    if (nums.length >= 1 && !isNaN(val) && val > 0) {
+      nums.forEach(n => { data[n] = (data[n]||0) + val; });
+      results.push(`${nums.join(',')}+${val}`);
+      finishParse(results); return;
+    }
+  }
+  
+  showToast('❌ 无法识别：' + text, 'error');
+  parseLog.push('❌ ' + text);
+  updateLogBox();
+}
+
+function finishParse(results) {
+  saveData(); renderGrid(); updateStats();
+  parseLog.push('✅ ' + results.join(', '));
+  updateLogBox();
+  showToast('✅ ' + results.join(', '), 'success');
+}
+
+function updateLogBox() {
+  let box = document.getElementById('logBox');
+  let recent = parseLog.slice(-8);
+  box.textContent = recent.join(' | ');
+  box.scrollLeft = box.scrollWidth;
+}
+
+function executeCmd() {
+  let input = document.getElementById('cmdInput');
+  let cmd = input.value.trim(); input.value = '';
+  if(!cmd) return;
+  if(/^清/.test(cmd)) { clearAll(); return; }
+  processBatch(cmd);
+}
+
+function setStatus(msg) { 
+  document.getElementById('logBox').textContent = msg; 
+}
+
+function undoLast() {
+  if (undoStack.length > 0) {
+    data = JSON.parse(undoStack.pop());
+    saveData(); renderGrid(); updateStats();
+    showToast('↩️ 已撤回', 'success');
+  }
+}
+
+function clearAll() {
+  if(confirm('确定清空？')) {
+    undoStack.push(JSON.stringify(data));
+    data = {}; for(let n=1;n<=49;n++) data[n]=0; 
+    saveData(); renderGrid(); updateStats(); showToast('✅ 已清空', 'success');
+  }
+}
+
+// ================= 频率分析 =================
+function toggleAnalysis(type) {
+  const body = document.getElementById(type + 'Body');
+  const toggle = document.getElementById(type + 'Toggle');
+  body.classList.toggle('show');
+  toggle.textContent = body.classList.contains('show') ? '▲' : '▼';
+  
+  if(type === 'freq' && body.classList.contains('show')) {
+    showFreqTab(currentFreqTab);
+  }
+  if(type === 'trend' && body.classList.contains('show')) {
+    showTrendTab('line');
+  }
+}
+
+function showFreqTab(tab) {
+  currentFreqTab = tab;
+  document.querySelectorAll('#freqBody .export-btn').forEach(b => b.style.background = '#333');
+  document.getElementById('btn' + tab.charAt(0).toUpperCase() + tab.slice(1)).style.background = '#555';
+  
+  let html = '';
+  if(tab === 'hot' || tab === 'cold') {
+    let freqs = [];
+    for(let n=1;n<=49;n++) {
+      let freq = getFrequency(n);
+      let missing = getMissingPeriods(n);
+      let recentHits = getRecentHits(n, 10);
+      let recentHits20 = getRecentHits(n, 20);
+      freqs.push({n, freq, missing, recentHits, recentHits20});
+    }
+    
+    if(tab === 'hot') freqs.sort((a,b) => b.freq - a.freq);
+    else freqs.sort((a,b) => b.missing - a.missing);
+    
+    html = '<div style="overflow-x:auto;padding:5px;"><table class="freq-table" style="min-width:360px;">';
+    html += '<tr><th>号码</th><th>生肖</th><th>总次数</th><th>近10期</th><th>近20期</th><th>几期没出</th></tr>';
+    freqs.forEach(f => {
+      let missColor = f.missing > 20 ? '#FF4D4D' : (f.missing > 10 ? '#F39C12' : '#00FF88');
+      html += `<tr>
+        <td class="${tab==='hot'?'freq-hot':'freq-cold'}">${String(f.n).padStart(2,'0')}</td>
+        <td>${ZODIAC_MAP[f.n]}</td>
+        <td style="font-weight:bold;">${f.freq}</td>
+        <td>${f.recentHits}</td>
+        <td>${f.recentHits20}</td>
+        <td style="font-weight:bold;color:${missColor};">${f.missing}</td>
+      </tr>`;
+    });
+    html += '</table></div>';
+  } else if(tab === 'missing') {
+    html = renderMissingMatrix();
+  }
+  document.getElementById('freqContent').innerHTML = html;
+}
+
+function getRecentHits(n, period) {
+  let count = 0;
+  let slice = historyData.slice(0, period);
+  slice.forEach(h => { if(h.winNum === n) count++; });
+  return count;
+}
+
+function getMissingPeriods(n) {
+  let missing = 0;
+  for(let i=0; i<historyData.length; i++) {
+    if(historyData[i].winNum === n) break;
+    missing++;
+  }
+  return missing;
+}
+
+function renderMissingMatrix() {
+  if(historyData.length === 0) return '<div style="text-align:center;color:#666;padding:20px;">暂无开奖记录</div>';
+  
+  let maxPeriods = Math.min(Math.max(historyData.length, 30), 70);
+  let recentHistory = historyData.slice(0, maxPeriods).reverse(); // 最早到最近
+  
+  // 构建横向遗漏矩阵
+  let html = '<div style="overflow-x:auto;padding:5px;">';
+  html += `<div style="font-size:12px;color:var(--gold);margin-bottom:8px;font-weight:bold;">遗漏矩阵（横向${maxPeriods}期 | ● = 开出 | 空白 = 遗漏）</div>`;
+  html += '<table style="border-collapse:collapse;font-size:9px;">';
+  
+  // 期号行
+  html += '<tr><th style="padding:2px 4px;background:#111;position:sticky;left:0;z-index:2;color:#888;">号码</th>';
+  for(let i=0;i<maxPeriods;i++) {
+    let h = recentHistory[i];
+    let waveColor = RED.has(h.winNum) ? '#E74C3C' : (BLUE.has(h.winNum) ? '#3498DB' : '#27AE60');
+    html += `<th style="padding:2px 3px;background:#111;color:${waveColor};min-width:16px;" title="第${h.period}期 开${h.winNum}">${h.winNum}</th>`;
+  }
+  html += '<th style="padding:2px 4px;background:#111;color:#FFD700;position:sticky;right:0;z-index:2;">当前遗漏</th></tr>';
+  
+  // 每个号码一行
+  for(let n=1;n<=49;n++) {
+    let z = ZODIAC_MAP[n];
+    let waveColor = RED.has(n) ? '#E74C3C' : (BLUE.has(n) ? '#3498DB' : '#27AE60');
+    let missing = getMissingPeriods(n);
+    let missColor = missing > 20 ? '#FF4D4D' : (missing > 10 ? '#F39C12' : '#00FF88');
+    
+    html += `<tr style="border-top:1px solid #222;">`;
+    html += `<td style="padding:2px 4px;background:#111;position:sticky;left:0;z-index:1;font-weight:bold;color:${waveColor};">${String(n).padStart(2,'0')}<span style="color:#666;font-size:8px;">${z}</span></td>`;
+    
+    for(let i=0;i<maxPeriods;i++) {
+      if(recentHistory[i].winNum === n) {
+        html += `<td style="padding:1px;background:${waveColor};min-width:16px;text-align:center;border-radius:1px;">●</td>`;
+      } else {
+        html += `<td style="padding:1px;background:#0a0a15;min-width:16px;"></td>`;
+      }
+    }
+    
+    html += `<td style="padding:2px 4px;background:#111;position:sticky;right:0;z-index:1;text-align:center;font-weight:bold;color:${missColor};">${missing}</td>`;
+    html += '</tr>';
+  }
+  
+  html += '</table></div>';
+  return html;
+}
+
+// ================= 趋势图表 =================
+let currentTrendTab = 'line';
+function showTrendTab(tab) {
+  currentTrendTab = tab;
+  document.querySelectorAll('#trendBody .export-btn').forEach(b => b.style.background = '#333');
+  const btnId = {line: 'btnTrendLine', bigsmall: 'btnTrendBigsmall', oddeven: 'btnTrendOddeven', wave: 'btnTrendWave', oddevenstats: 'btnTrendOddevenStats'}[tab];
+  if(btnId) document.getElementById(btnId).style.background = '#555';
+  
+  if(tab === 'line') renderTrendLine();
+  else if(tab === 'bigsmall') renderBigSmall();
+  else if(tab === 'oddeven') renderOddEven();
+  else if(tab === 'wave') renderWaveStats();
+  else if(tab === 'oddevenstats') renderOddEvenStats();
+}
+
+function renderTrendLine() {
+  const container = document.getElementById('trendChart');
+  if(historyData.length < 2) {
+    container.innerHTML = '<div style="text-align:center;color:#666;padding:40px;">需要至少2期数据才能显示趋势</div>';
+    return;
+  }
+  
+  let recent = historyData.slice(0, 30).reverse();
+  let allNets = recent.map(h => h.net);
+  let maxAbs = Math.max(...allNets.map(Math.abs));
+  let maxNet = Math.max(maxAbs, 3500); // 至少支持3000
+  
+  let svg = `<svg class="chart-svg" viewBox="0 0 500 280">`;
+  
+  // 参考水平线：+/- 500, 1000, 2000, 3000
+  let refs = [500, 1000, 2000, 3000];
+  let centerY = 140; // 中心零线
+  let range = 120; // 上下最大像素范围
+  function netToY(net) { return centerY - (net / maxNet * range); }
+  
+  // 零线
+  svg += `<line x1="50" y1="${centerY}" x2="490" y2="${centerY}" stroke="#444" stroke-width="1.5"/>`;
+  svg += `<text x="45" y="${centerY+4}" fill="#888" font-size="10" text-anchor="end">0</text>`;
+  
+  refs.forEach(r => {
+    let yUp = netToY(r);
+    let yDown = netToY(-r);
+    svg += `<line x1="50" y1="${yUp}" x2="490" y2="${yUp}" stroke="#333" stroke-width="0.8" stroke-dasharray="4,3"/>`;
+    svg += `<text x="45" y="${yUp+4}" fill="#00FF88" font-size="9" text-anchor="end">+${r}</text>`;
+    svg += `<line x1="50" y1="${yDown}" x2="490" y2="${yDown}" stroke="#333" stroke-width="0.8" stroke-dasharray="4,3"/>`;
+    svg += `<text x="45" y="${yDown+4}" fill="#FF4D4D" font-size="9" text-anchor="end">-${r}</text>`;
+  });
+  
+  let points = [];
+  recent.forEach((h, i) => {
+    let x = 60 + (i * (420 / (recent.length - 1)));
+    let y = netToY(h.net);
+    points.push({x, y, h});
+  });
+  
+  // 填充区域
+  let areaD = points.map((p, i) => `${i===0?'M':'L'} ${p.x} ${p.y}`).join(' ');
+  areaD += ` L ${points[points.length-1].x} ${centerY} L ${points[0].x} ${centerY} Z`;
+  svg += `<path d="${areaD}" fill="${points[points.length-1].h.net >= 0 ? 'rgba(0,255,136,0.08)' : 'rgba(255,77,77,0.08)'}"/>`;
+  
+  // 连线
+  let pathD = points.map((p, i) => `${i===0?'M':'L'} ${p.x} ${p.y}`).join(' ');
+  svg += `<path d="${pathD}" fill="none" stroke="${points[points.length-1].h.net >= 0 ? '#00FF88' : '#FF4D4D'}" stroke-width="2.5"/>`;
+  
+  points.forEach(p => {
+    let color = p.h.net >= 0 ? '#00FF88' : '#FF4D4D';
+    svg += `<circle cx="${p.x}" cy="${p.y}" r="5" fill="${color}" stroke="#05050A" stroke-width="2"/>`;
+    svg += `<text x="${p.x}" y="${p.y - 10}" fill="#fff" font-size="8" text-anchor="middle" font-weight="bold">${Math.round(p.h.net)}</text>`;
+  });
+  
+  // X轴标签
+  recent.forEach((h, i) => {
+    if(i % Math.ceil(recent.length / 6) === 0) {
+      let x = 60 + (i * (420 / (recent.length - 1)));
+      svg += `<text x="${x}" y="275" fill="#666" font-size="9" text-anchor="middle">${h.period}</text>`;
+    }
+  });
+  
+  svg += '</svg>';
+  container.innerHTML = svg;
+}
+
+function renderBigSmall() {
+  const container = document.getElementById('trendChart');
+  if(historyData.length < 2) {
+    container.innerHTML = '<div style="text-align:center;color:#666;padding:40px;">需要至少2期数据才能显示走势</div>';
+    return;
+  }
+  
+  let recent = historyData.slice(0, 20).reverse();
+  
+  let svg = `<svg class="chart-svg" viewBox="0 0 400 200">`;
+  // 分隔线
+  svg += `<line x1="40" y1="100" x2="390" y2="100" stroke="#333" stroke-width="1"/>`;
+  svg += `<text x="25" y="35" fill="#E74C3C" font-size="10" text-anchor="middle">大</text>`;
+  svg += `<text x="25" y="175" fill="#3498DB" font-size="10" text-anchor="middle">小</text>`;
+  
+  let points = [];
+  recent.forEach((h, i) => {
+    let x = 50 + (i * (340 / (recent.length - 1)));
+    let y = h.winNum >= 25 ? 30 : 170;
+    let isBig = h.winNum >= 25;
+    points.push({x, y, h, isBig});
+  });
+  
+  // 连线
+  let pathD = points.map((p, i) => `${i===0?'M':'L'} ${p.x} ${p.y}`).join(' ');
+  svg += `<path d="${pathD}" fill="none" stroke="#555" stroke-width="1.5" stroke-dasharray="4,3"/>`;
+  
+  // 数据点
+  points.forEach(p => {
+    let color = p.isBig ? '#E74C3C' : '#3498DB';
+    let waveColor = RED.has(p.h.winNum) ? '#E74C3C' : (BLUE.has(p.h.winNum) ? '#3498DB' : '#27AE60');
+    svg += `<circle cx="${p.x}" cy="${p.y}" r="6" fill="${color}" stroke="${waveColor}" stroke-width="2"/>`;
+    svg += `<text x="${p.x}" y="${p.y + 4}" fill="#fff" font-size="8" text-anchor="middle" font-weight="bold">${p.h.winNum}</text>`;
+  });
+  
+  // X轴标签
+  recent.forEach((h, i) => {
+    if(i % Math.ceil(recent.length / 5) === 0) {
+      let x = 50 + (i * (340 / (recent.length - 1)));
+      svg += `<text x="${x}" y="195" fill="#666" font-size="8" text-anchor="middle">${h.period}</text>`;
+    }
+  });
+  
+  svg += '</svg>';
+  container.innerHTML = svg;
+}
+
+function renderWaveStats() {
+  const container = document.getElementById('trendChart');
+  if(historyData.length === 0) {
+    container.innerHTML = '<div style="text-align:center;color:#666;padding:40px;">暂无开奖记录</div>';
+    return;
+  }
+  
+  let redCount = 0, blueCount = 0, greenCount = 0;
+  let recent = historyData.slice(0, 30);
+  
+  recent.forEach(h => {
+    let winNum = h.winNum;
+    if(RED.has(winNum)) redCount++;
+    else if(BLUE.has(winNum)) blueCount++;
+    else greenCount++;
+  });
+  
+  let total = redCount + blueCount + greenCount;
+  let redPct = total > 0 ? (redCount/total*100).toFixed(1) : 0;
+  let bluePct = total > 0 ? (blueCount/total*100).toFixed(1) : 0;
+  let greenPct = total > 0 ? (greenCount/total*100).toFixed(1) : 0;
+  
+  // 每期波色明细
+  let detailHtml = '';
+  recent.slice().reverse().forEach(h => {
+    let wave = RED.has(h.winNum) ? '<span class="wave-red">红</span>' : (BLUE.has(h.winNum) ? '<span class="wave-blue">蓝</span>' : '<span class="wave-green">绿</span>');
+    detailHtml += `<div style="display:inline-block;padding:2px 5px;margin:1px;background:#111;border-radius:3px;font-size:11px;">${h.period}: <b>${h.winNum}</b> ${wave}</div>`;
+  });
+  
+  container.innerHTML = `
+    <div style="padding:5px;">
+      <div style="margin-bottom:12px;">
+        <div style="font-size:13px;font-weight:bold;margin-bottom:8px;color:var(--gold);">近${recent.length}期波色分布</div>
+        <div style="display:flex;gap:10px;margin-bottom:8px;">
+          <div style="flex:1;background:#111;padding:8px;border-radius:6px;text-align:center;">
+            <div style="font-size:22px;font-weight:900;color:#E74C3C;">${redCount}</div>
+            <div style="font-size:10px;color:#888;">红波 ${redPct}%</div>
+          </div>
+          <div style="flex:1;background:#111;padding:8px;border-radius:6px;text-align:center;">
+            <div style="font-size:22px;font-weight:900;color:#3498DB;">${blueCount}</div>
+            <div style="font-size:10px;color:#888;">蓝波 ${bluePct}%</div>
+          </div>
+          <div style="flex:1;background:#111;padding:8px;border-radius:6px;text-align:center;">
+            <div style="font-size:22px;font-weight:900;color:#27AE60;">${greenCount}</div>
+            <div style="font-size:10px;color:#888;">绿波 ${greenPct}%</div>
+          </div>
+        </div>
+        <div style="height:8px;background:#222;border-radius:4px;overflow:hidden;display:flex;">
+          <div style="width:${redPct}%;background:#E74C3C;transition:width 0.3s;"></div>
+          <div style="width:${bluePct}%;background:#3498DB;transition:width 0.3s;"></div>
+          <div style="width:${greenPct}%;background:#27AE60;transition:width 0.3s;"></div>
+        </div>
+      </div>
+      <div style="max-height:120px;overflow-y:auto;">${detailHtml || '暂无数据'}</div>
+    </div>
+  `;
+}
+
+function renderOddEven() {
+  const container = document.getElementById('trendChart');
+  if(historyData.length < 2) {
+    container.innerHTML = '<div style="text-align:center;color:#666;padding:40px;">需要至少2期数据才能显示走势</div>';
+    return;
+  }
+  
+  let recent = historyData.slice(0, 20).reverse();
+  
+  let svg = `<svg class="chart-svg" viewBox="0 0 500 220">`;
+  svg += `<line x1="50" y1="40" x2="490" y2="40" stroke="#333" stroke-width="0.8" stroke-dasharray="4,3"/>`;
+  svg += `<line x1="50" y1="180" x2="490" y2="180" stroke="#333" stroke-width="0.8" stroke-dasharray="4,3"/>`;
+  svg += `<text x="25" y="44" fill="#27AE60" font-size="11" text-anchor="middle" font-weight="bold">单</text>`;
+  svg += `<text x="25" y="184" fill="#8B5CF6" font-size="11" text-anchor="middle" font-weight="bold">双</text>`;
+  
+  let points = [];
+  recent.forEach((h, i) => {
+    let x = 60 + (i * (420 / (recent.length - 1)));
+    let isOdd = h.winNum % 2 !== 0;
+    let y = isOdd ? 40 : 180;
+    points.push({x, y, h, isOdd});
+  });
+  
+  let pathD = points.map((p, i) => `${i===0?'M':'L'} ${p.x} ${p.y}`).join(' ');
+  svg += `<path d="${pathD}" fill="none" stroke="#444" stroke-width="1.5" stroke-dasharray="4,3"/>`;
+  
+  points.forEach(p => {
+    let color = p.isOdd ? '#27AE60' : '#8B5CF6';
+    let waveColor = RED.has(p.h.winNum) ? '#E74C3C' : (BLUE.has(p.h.winNum) ? '#3498DB' : '#27AE60');
+    svg += `<circle cx="${p.x}" cy="${p.y}" r="7" fill="${color}" stroke="${waveColor}" stroke-width="2"/>`;
+    svg += `<text x="${p.x}" y="${p.y + 4}" fill="#fff" font-size="8" text-anchor="middle" font-weight="bold">${p.h.winNum}</text>`;
+  });
+  
+  recent.forEach((h, i) => {
+    if(i % Math.ceil(recent.length / 5) === 0) {
+      let x = 60 + (i * (420 / (recent.length - 1)));
+      svg += `<text x="${x}" y="210" fill="#666" font-size="8" text-anchor="middle">${h.period}</text>`;
+    }
+  });
+  
+  svg += '</svg>';
+  container.innerHTML = svg;
+}
+
+function renderOddEvenStats() {
+  const container = document.getElementById('trendChart');
+  if(historyData.length === 0) {
+    container.innerHTML = '<div style="text-align:center;color:#666;padding:40px;">暂无开奖记录</div>';
+    return;
+  }
+  
+  let oddCount = 0, evenCount = 0;
+  let recent = historyData.slice(0, 30);
+  
+  recent.forEach(h => {
+    if(h.winNum % 2 !== 0) oddCount++;
+    else evenCount++;
+  });
+  
+  let total = oddCount + evenCount;
+  let oddPct = total > 0 ? (oddCount/total*100).toFixed(1) : 0;
+  let evenPct = total > 0 ? (evenCount/total*100).toFixed(1) : 0;
+  
+  let detailHtml = '';
+  recent.slice().reverse().forEach(h => {
+    let oe = h.winNum % 2 !== 0 ? '<span style="color:#27AE60;font-weight:bold;">单</span>' : '<span style="color:#8B5CF6;font-weight:bold;">双</span>';
+    detailHtml += `<div style="display:inline-block;padding:2px 5px;margin:1px;background:#111;border-radius:3px;font-size:11px;">${h.period}: <b>${h.winNum}</b> ${oe}</div>`;
+  });
+  
+  container.innerHTML = `
+    <div style="padding:5px;">
+      <div style="margin-bottom:12px;">
+        <div style="font-size:13px;font-weight:bold;margin-bottom:8px;color:var(--gold);">近${recent.length}期单双分布</div>
+        <div style="display:flex;gap:10px;margin-bottom:8px;">
+          <div style="flex:1;background:#111;padding:8px;border-radius:6px;text-align:center;">
+            <div style="font-size:22px;font-weight:900;color:#27AE60;">${oddCount}</div>
+            <div style="font-size:10px;color:#888;">单数 ${oddPct}%</div>
+          </div>
+          <div style="flex:1;background:#111;padding:8px;border-radius:6px;text-align:center;">
+            <div style="font-size:22px;font-weight:900;color:#8B5CF6;">${evenCount}</div>
+            <div style="font-size:10px;color:#888;">双数 ${evenPct}%</div>
+          </div>
+        </div>
+        <div style="height:8px;background:#222;border-radius:4px;overflow:hidden;display:flex;">
+          <div style="width:${oddPct}%;background:#27AE60;transition:width 0.3s;"></div>
+          <div style="width:${evenPct}%;background:#8B5CF6;transition:width 0.3s;"></div>
+        </div>
+      </div>
+      <div style="max-height:120px;overflow-y:auto;">${detailHtml || '暂无数据'}</div>
+    </div>
+  `;
+}
+
+// ================= 统计模块 =================
+function updateStats() {
+  let oddsStr = document.getElementById('oddsInput').value;
+  currentOdds = parseFloat(oddsStr) || 47.5;
+  document.getElementById('grandTotal').textContent = Object.values(data).reduce((a, b) => a + b, 0);
+  
+  let risks = [];
+  let totalPool = document.getElementById('grandTotal').textContent;
+  for(let n=1;n<=49;n++) {
+    let bet = data[n]||0;
+    if(bet > 0) {
+      let pay = bet * currentOdds; let res = totalPool - pay;
+      risks.push({n: n, bet: bet, pay: pay, res: res});
+    }
+  }
+  risks.sort((a, b) => a.res - b.res);
+  
+  let listHtml = '';
+  risks.forEach(r => {
+    let cls = r.res >= 0 ? 'safe' : 'danger';
+    let resText = r.res >= 0 ? `+${Math.round(r.res)}` : `-${Math.abs(Math.round(r.res))}`;
+    let resCls = r.res >= 0 ? 'profit' : 'loss';
+    listHtml += `<div class="risk-item ${cls}">
+      <span class="risk-num">${String(r.n).padStart(2,'0')}</span>
+      <span class="risk-val">${r.bet}</span>
+      <span class="risk-res ${resCls}">${resText}</span>
+    </div>`;
+  });
+  document.getElementById('riskList').innerHTML = listHtml || '<div style="text-align:center;color:#666;padding:15px">暂无数据</div>';
+  updateHeatmap();
+}
+document.getElementById('oddsInput').addEventListener('change', updateStats);
+document.getElementById('oddsInput').addEventListener('keyup', function(e) { if(e.key === 'Enter') updateStats(); });
+
+// ================= 历史记录 =================
+function submitWin() {
+  let winNum = parseInt(document.getElementById('winNumInput')?.value || prompt("输入开奖号:"));
+  if(!winNum) winNum = parseInt(prompt("输入开奖号:"));
+  if(!winNum || winNum < 1 || winNum > 49) { alert('无效号码'); return; }
+  
+  let period = prompt("请输入期数:", ""); if(!period) return;
+  undoStack.push(JSON.stringify(data)); saveRecord(period, winNum); renderGrid();
+}
+
+function saveRecord(period, winNum) {
+  let totalPool = 0; for(let n=1;n<=49;n++) totalPool += (data[n]||0);
+  let winBet = data[winNum] || 0; let payout = winBet * currentOdds; let net = totalPool - payout;
+  let record = { id: 'rec_'+Date.now(), period: period, winNum: winNum, data: JSON.parse(JSON.stringify(data)), totalPool: totalPool, payout: payout, net: net, odds: currentOdds, time: new Date().toLocaleTimeString() };
+  
+  historyData.unshift(record);
+  try { 
+    localStorage.setItem('history_v23', JSON.stringify(historyData));
+    localStorage.setItem('history_v24', JSON.stringify(historyData));
+  } catch(e) {}
+  refreshHistory();
+  showToast(`第${period}期结算：${net >= 0 ? '+' : ''}${Math.round(net)}`, net >= 0 ? 'success' : 'warning');
+}
+
+function refreshHistory() {
+  let list = document.getElementById('historyList');
+  let html = '';
+  historyData.forEach(h => {
+    let cls = h.net >= 0 ? 'profit' : 'loss';
+    html += `<div class="hist-item" onclick="loadRecord('${h.id}')">
+      <div class="hist-row"><span>第 ${h.period} 期</span><span style="color:var(--gold)">开 ${h.winNum}</span><span class="${cls}">${h.net >= 0 ? '+' : ''}${Math.round(h.net)}</span></div>
+      <div style="color:#888">总注 ${h.totalPool} | 赔付 ${Math.round(h.payout)}</div>
+    </div>`;
+  });
+  list.innerHTML = html || '<div style="text-align:center;color:#666;padding:15px">暂无记录</div>';
+}
+
+function loadRecord(id) {
+  let rec = historyData.find(h => h.id === id);
+  if(rec) {
+    if(!confirm(`读取第 ${rec.period} 期？`)) return;
+    undoStack.push(JSON.stringify(data));
+    data = rec.data; currentOdds = rec.odds || 47.5;
+    document.getElementById('oddsInput').value = currentOdds;
+    saveData(); renderGrid(); updateStats(); showToast('✅ 已读取', 'success');
+  }
+}
+
+// ================= 数据导出 =================
+function toggleExportPanel() {
+  document.getElementById('exportPanel').classList.toggle('show');
+}
+
+function exportCSV() {
+  let lines = ['号码,生肖,累计,波色'];
+  for(let n=1;n<=49;n++) {
+    let wave = RED.has(n) ? '红' : (BLUE.has(n) ? '蓝' : '绿');
+    lines.push(`${n},${ZODIAC_MAP[n]},${data[n]||0},${wave}`);
+  }
+  downloadFile('号码统计_' + new Date().toISOString().slice(0,10) + '.csv', lines.join('\n'), 'text/csv');
+  showToast('✅ CSV 已导出', 'success');
+}
+
+function exportJSON() {
+  let json = JSON.stringify({data, history: historyData, exportTime: new Date().toISOString()}, null, 2);
+  downloadFile('号码统计_' + new Date().toISOString().slice(0,10) + '.json', json, 'application/json');
+  showToast('✅ JSON 已导出', 'success');
+}
+
+function downloadFile(filename, content, type) {
+  let blob = new Blob([content], { type: type + ';charset=utf-8' });
+  let url = URL.createObjectURL(blob);
+  let a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function importData() {
+  let input = document.createElement('input');
+  input.type = 'file'; input.accept = '.json';
+  input.onchange = function(e) {
+    let file = e.target.files[0];
+    if(!file) return;
+    let reader = new FileReader();
+    reader.onload = function(ev) {
+      try {
+        let imported = JSON.parse(ev.target.result);
+        if(imported.data) {
+          undoStack.push(JSON.stringify(data));
+          data = imported.data;
+          for(let n=1;n<=49;n++) if(data[n]===undefined) data[n]=0;
+        }
+        if(imported.history) {
+          historyData = imported.history;
+          try { localStorage.setItem('history_v24', JSON.stringify(historyData)); } catch(e) {}
+        }
+        saveData(); renderGrid(); updateStats(); refreshHistory();
+        showToast('✅ 数据已导入', 'success');
+      } catch(e) {
+        showToast('❌ 导入失败', 'error');
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+// ================= Toast 提示 =================
+function showToast(msg, type = 'success') {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.className = 'toast ' + type + ' show';
+  setTimeout(() => toast.classList.remove('show'), 2500);
+}
+
+function copyStats() {
+  let lines = ['号码\t生肖\t累计\t波色'];
+  for(let n=1;n<=49;n++) {
+    let wave = RED.has(n) ? '红' : (BLUE.has(n) ? '蓝' : '绿');
+    if(data[n]>0) lines.push(`${String(n).padStart(2,'0')}\t${ZODIAC_MAP[n]}\t${data[n]}\t${wave}`);
+  }
+  navigator.clipboard.writeText(lines.join('\n')).then(()=>showToast('✅ 已复制报表', 'success'));
+}
+
+// ================= 事件绑定 =================
+document.getElementById('cmdInput').addEventListener('input', function(e) {
+  showSuggestions(e.target.value);
+});
+
+document.getElementById('cmdInput').addEventListener('keydown', function(e) {
+  if(e.key === 'Escape') hideSuggestions();
+});
+
+document.addEventListener('click', function(e) {
+  if(!e.target.closest('.input-zone')) hideSuggestions();
+});
+
+// ================= 初始化 =================
+loadData(); renderGrid(); updateStats();
+</script>
+</body>
+</html>
