@@ -1478,6 +1478,8 @@ function updateStats() {
       <span class="risk-res ${resCls}">${resText}</span>
     </div>`;
   });
+  // 平特肖附表同步刷新（只要有此函数定义）
+  if (typeof renderPtx === 'function') renderPtx();
   document.getElementById('riskList').innerHTML = listHtml || '<div style="text-align:center;color:#666;padding:15px">暂无数据</div>';
   updateHeatmap();
 }
