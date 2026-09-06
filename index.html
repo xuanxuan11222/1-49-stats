@@ -48,7 +48,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#05050A">
-<title>1-49号码统计系统 v30.4 平特肖独立账本</title>
+<title>1-49号码统计系统 v30.5 风险算法修正</title>
 <style>
 :root {
   --bg: #05050A; --card-bg: rgba(20, 20, 35, 0.9); --border: #2A2A40;
@@ -273,7 +273,7 @@ body {
 
 <div class="app-header">
   <div class="header-top">
-    <span class="app-title">🔢 1-49 统算中心 v30.4 平特肖独立账本</span>
+    <span class="app-title">🔢 1-49 统算中心 v30.5 风险算法修正</span>
     <span style="font-size:10px;color:#666;">AI 增强</span>
   </div>
   <div class="total-display">
@@ -458,6 +458,7 @@ body {
         <input type="number" id="oddsInput" value="47.5" step="0.1" style="width:55px;background:#222;border:1px solid #555;color:#fff;padding:3px;border-radius:4px;text-align:center;">
       </div>
     </div>
+    <div id="riskSummary" style="font-size:12px;padding:6px 8px;display:flex;gap:12px;justify-content:center;border-bottom:1px solid #333;"></div>
     <div class="risk-list" id="riskList"></div>
   </div>
 
@@ -637,10 +638,10 @@ function updateHeatmap() {
       if(bet > maxBet) maxBet = bet;
       let pay = bet * currentOdds;
       let res = totalPool - pay;
-      if(res >= 0) { 
+      if(res < 0) {  // res<0 → 派奖>总池 → 该号中则盈利 → 安全(绿)
         el.classList.add('heat-safe'); 
         safeCount++;
-      } else { 
+      } else {  // res>=0 → 该号中则亏损 → 危险(红)
         el.classList.add('heat-danger'); 
         riskCount++;
       }
@@ -1510,16 +1511,22 @@ function updateStats() {
   risks.sort((a, b) => a.res - b.res);
   
   let listHtml = '';
+  let lossCount = 0, profitCount = 0;
   risks.forEach(r => {
-    let cls = r.res >= 0 ? 'safe' : 'danger';
-    let resText = r.res >= 0 ? `+${Math.round(r.res)}` : `-${Math.abs(Math.round(r.res))}`;
-    let resCls = r.res >= 0 ? 'profit' : 'loss';
+    let net = -r.res;  // 净盈亏 = 派奖 - 总下注（r.res = 总池-派奖，取反得真实净收）
+    let cls = net >= 0 ? 'safe' : 'danger';
+    let resText = net >= 0 ? `+${Math.round(net)}` : `-${Math.abs(Math.round(net))}`;
+    let resCls = net >= 0 ? 'profit' : 'loss';
+    if(net < 0) lossCount++; else profitCount++;
     listHtml += `<div class="risk-item ${cls}">
       <span class="risk-num">${String(r.n).padStart(2,'0')}</span>
       <span class="risk-val">${r.bet}</span>
       <span class="risk-res ${resCls}">${resText}</span>
     </div>`;
   });
+  let ratio = risks.length ? Math.round(lossCount / risks.length * 100) : 0;
+  let sumEl = document.getElementById('riskSummary');
+  if(sumEl) sumEl.innerHTML = `<span style="color:var(--red);">⚠️ 亏损 ${lossCount}</span><span style="color:var(--green);">✅ 盈利 ${profitCount}</span><span style="color:var(--gold);">风险占比 ${ratio}%</span>`;
   // 平特肖附表同步刷新（只要有此函数定义）
   if (typeof renderPtx === 'function') renderPtx();
   document.getElementById('riskList').innerHTML = listHtml || '<div style="text-align:center;color:#666;padding:15px">暂无数据</div>';
@@ -1540,7 +1547,7 @@ function submitWin() {
 
 function saveRecord(period, winNum) {
   let totalPool = 0; for(let n=1;n<=49;n++) totalPool += (data[n]||0);
-  let winBet = data[winNum] || 0; let payout = winBet * currentOdds; let net = totalPool - payout;
+  let winBet = data[winNum] || 0; let payout = winBet * currentOdds; let net = payout - totalPool;  // 真实净盈亏(盈为正)
   let record = { id: 'rec_'+Date.now(), period: period, winNum: winNum, data: JSON.parse(JSON.stringify(data)), totalPool: totalPool, payout: payout, net: net, odds: currentOdds, time: new Date().toLocaleTimeString() };
   
   historyData.unshift(record);
@@ -1591,7 +1598,7 @@ function exportCSV() {
     let dx = n>=25?'大':'小';
     let tail = n%10;
     let freq = getFrequency(n);
-    let net = Math.round(totalPool - b*odds);
+    let net = Math.round(b*odds - totalPool);  // 净收 = 派奖 - 总下注
     lines.push([n, ZODIAC_MAP[n], b, wave, sd, dx, tail, freq, net].join(','));
   }
   downloadFile('号码统计_' + new Date().toISOString().slice(0,10) + '.csv', lines.join('\n'), 'text/csv');
@@ -1660,16 +1667,14 @@ function copyStats() {
     if(b>0){ numCount++; if(b>maxBet){ maxBet=b; maxBetN=n; } }
     if(RED.has(n)) redSum+=b; else if(BLUE.has(n)) blueSum+=b; else greenSum+=b;
   }
-  let risks = [];
-  for(let n=1;n<=49;n++){ let b=data[n]||0; if(b>0) risks.push({n, res: totalPool - b*odds}); }
-  risks.sort((a,b)=>a.res-b.res);
-  let be = risks.find(r=>r.res>=0);
+  let beBet = totalPool>0 ? Math.ceil(totalPool / odds) : 0;  // 单注达此值即保本(不亏)
+  let beCount = 0; for(let n=1;n<=49;n++){ if((data[n]||0) >= beBet) beCount++; }
   let settle = computeSettlement();
   let L = [];
   L.push('===== 1-49 统算报表 =====');
   L.push('总下注\t'+totalPool+'\t注数\t'+numCount);
   L.push('波色占比\t红:'+redSum+'\t蓝:'+blueSum+'\t绿:'+greenSum);
-  L.push('最大单注\t'+String(maxBetN).padStart(2,'0')+'号('+maxBet+')'+(be?('\t保本开奖号: 开出≥'+be.n+'即不亏'):''));
+  L.push('最大单注\t'+String(maxBetN).padStart(2,'0')+'号('+maxBet+')'+(totalPool>0?('\t保本线: 单注≥'+beBet+'即不亏(达标'+beCount+'个号)'):''));
   if(settle.count>0){
     L.push('---- 历史结算 ----');
     L.push('期数\t'+settle.count+'\t总投入\t'+settle.totalBet+'\t总派奖\t'+settle.totalPayout);
@@ -1684,7 +1689,7 @@ function copyStats() {
     let dx = n>=25?'大':'小';
     let tail = n%10;
     let omit = omissionOf(n);
-    let net = Math.round(totalPool - b*odds);
+    let net = Math.round(b*odds - totalPool);  // 净收 = 派奖 - 总下注
     L.push([String(n).padStart(2,'0'), ZODIAC_MAP[n], b, wave, sd, dx, tail, omit, (net>=0?'+':'')+net].join('\t'));
   }
   safeCopy(L.join('\n'));
